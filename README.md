@@ -1,22 +1,27 @@
 # YNAB MCP Connector
 
-A Model Context Protocol (MCP) connector for You Need A Budget (YNAB) that exposes YNAB API functionality to AI assistants like Mistral.
+A Model Context Protocol (MCP) connector for You Need A Budget (YNAB) that exposes the official YNAB API v1.85.0 functionality to AI assistants like Mistral.
 
 ## Features
 
 - **MCP Standard Endpoints**: Health checks, server info, and capabilities
-- **Budget Management**: List and retrieve YNAB budget details
-- **Category Access**: Browse budget categories
-- **Account Management**: View all accounts in a budget
-- **Transaction Handling**: Read and create transactions
-- **Resource Discovery**: MCP-compatible resource endpoints for budgets, accounts, and categories
-- **Tool Integration**: MCP tool endpoints for AI assistant integration
+- **Plans Management**: List and retrieve YNAB plan details with all related entities
+- **User Information**: Get authenticated user data
+- **Accounts Management**: Full CRUD operations for accounts
+- **Categories Management**: Full CRUD operations for categories and category groups
+- **Payees Management**: Full CRUD operations for payees
+- **Transactions Management**: Full CRUD operations, bulk updates, and import functionality
+- **Scheduled Transactions**: Full CRUD operations for future-dated transactions
+- **Months**: Access plan months and month-specific data
+- **Money Movements**: Read access to money movement history
+- **Resource Discovery**: MCP-compatible resource endpoints using URIs
+- **Tool Integration**: 30+ MCP tool endpoints for AI assistant integration
 
 ## Prerequisites
 
 - Python 3.13+
 - [uv](https://github.com/astral-sh/uv) package manager
-- A [YNAB Personal Access Token](https://api.youneedabudget.com/#personal-access-tokens)
+- A [YNAB Personal Access Token](https://api.ynab.com/#personal-access-tokens)
 
 ## Quick Start
 
@@ -72,6 +77,9 @@ The server will start on `http://0.0.0.0:8000` with auto-reload enabled.
 ```bash
 curl http://localhost:8000/mcp/health
 # {"status":"healthy","version":"0.1.0"}
+
+curl http://localhost:8000/mcp/info
+# {"name":"YNAB Connector","version":"0.1.0",...}
 ```
 
 ## Configuration
@@ -81,108 +89,241 @@ curl http://localhost:8000/mcp/health
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `YNAB_API_KEY` | Yes | - | Your YNAB Personal Access Token |
-| `YNAB_API_URL` | No | `https://api.youneedabudget.com/v1` | YNAB API base URL |
+| `YNAB_API_URL` | No | `https://api.ynab.com/v1` | YNAB API base URL (v1.85.0) |
 | `SERVER_HOST` | No | `0.0.0.0` | Server host address |
 | `SERVER_PORT` | No | `8000` | Server port |
 | `MCP_NAME` | No | `YNAB Connector` | MCP server name |
 | `MCP_VERSION` | No | `0.1.0` | MCP server version |
 
-## API Endpoints
+## API Overview
 
-### MCP Standard Endpoints
+This connector implements the **official YNAB API v1.85.0** specification.
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/mcp/health` | Health check endpoint |
-| GET | `/mcp/info` | Server information and capabilities |
+### Supported Resources
 
-### MCP Resource Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/mcp/resources/budgets` | List all budgets as MCP resources |
-| GET | `/mcp/resources/budgets/{budget_id}/accounts` | List accounts for a budget |
-| GET | `/mcp/resources/budgets/{budget_id}/categories` | List categories for a budget |
-
-### MCP Tool Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/mcp/tools/get_budget` | Get budget details |
-| POST | `/mcp/tools/get_transactions` | Get transactions for a budget |
-| POST | `/mcp/tools/create_transaction` | Create a new transaction |
-
-### Direct YNAB API Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/budgets` | List all accessible budgets |
-| GET | `/api/budgets/{budget_id}` | Get a specific budget |
-| GET | `/api/budgets/{budget_id}/categories` | Get all categories for a budget |
-| GET | `/api/budgets/{budget_id}/accounts` | Get all accounts for a budget |
-| GET | `/api/budgets/{budget_id}/transactions` | List transactions (with optional filters) |
-| POST | `/api/budgets/{budget_id}/transactions` | Create a new transaction |
-
-### Query Parameters
-
-For `/api/budgets/{budget_id}/transactions`:
-- `account_id` (optional): Filter by account ID
-- `since_date` (optional): Get transactions since date (format: YYYY-MM-DD)
-
-### Swagger UI
-
-Interactive API documentation is available at:
-
-```
-http://localhost:8000/docs
-```
+| Resource | Operations | Description |
+|----------|------------|-------------|
+| User | Read | Authenticated user information |
+| Plans | Read | List all plans, get plan details and settings |
+| Accounts | Read, Create | All accounts for a plan |
+| Categories | Read, Create, Update | Categories and category groups |
+| Payees | Read, Create, Update | Payees for a plan |
+| Payee Locations | Read | GPS locations for payees |
+| Months | Read | Plan months with summaries and details |
+| Transactions | Read, Create, Update, Delete | Full transaction management |
+| Scheduled Transactions | Read, Create, Update, Delete | Future-dated transactions |
+| Money Movements | Read | Money movement history |
 
 ## MCP Integration
 
-This connector implements the Model Context Protocol (MCP) specification, allowing AI assistants to interact with YNAB data.
+This connector implements the **Model Context Protocol (MCP)** specification using **JSON-RPC 2.0**, allowing AI assistants to interact with YNAB data.
+
+### MCP Discovery
+
+- **Server Card**: `GET /.well-known/mcp/server-card`
+- **MCP Endpoint**: `POST /mcp` (JSON-RPC 2.0)
 
 ### Resource URIs
 
-- Budgets: `ynab://budget/{budget_id}`
-- Accounts: `ynab://account/{account_id}`
-- Categories: `ynab://category/{category_id}`
+All resources use the official YNAB `/plans/` terminology:
+
+```
+ynab://user
+ynab://plans
+ynab://plan/{plan_id}
+ynab://plan/{plan_id}/settings
+ynab://plan/{plan_id}/accounts
+ynab://plan/{plan_id}/accounts/{account_id}
+ynab://plan/{plan_id}/categories
+ynab://plan/{plan_id}/categories/{category_id}
+ynab://plan/{plan_id}/category_groups
+ynab://plan/{plan_id}/category_groups/{category_group_id}
+ynab://plan/{plan_id}/payees
+ynab://plan/{plan_id}/payees/{payee_id}
+ynab://plan/{plan_id}/payee_locations
+ynab://plan/{plan_id}/payee_locations/{payee_location_id}
+ynab://plan/{plan_id}/payees/{payee_id}/payee_locations
+ynab://plan/{plan_id}/months
+ynab://plan/{plan_id}/months/{month}
+ynab://plan/{plan_id}/transactions
+ynab://plan/{plan_id}/transactions/{transaction_id}
+ynab://plan/{plan_id}/scheduled_transactions
+ynab://plan/{plan_id}/scheduled_transactions/{scheduled_transaction_id}
+ynab://plan/{plan_id}/money_movements
+ynab://plan/{plan_id}/money_movement_groups
+```
+
+**Special plan_id values**: `"last-used"` and `"default"` are supported where applicable.
+
+### Available MCP Tools
+
+30+ tools are available via `tools/list` and `tools/call`:
+
+**User:**
+- `get_user` - Get authenticated user information
+
+**Plans:**
+- `get_plans` - List all accessible plans
+- `get_plan` - Get a specific plan with all related entities
+- `get_plan_settings` - Get settings for a plan
+
+**Accounts:**
+- `get_accounts` - List all accounts for a plan
+- `get_account` - Get a specific account
+- `create_account` - Create a new account
+
+**Categories:**
+- `get_categories` - List all categories for a plan
+- `get_category` - Get a specific category
+- `create_category` - Create a new category
+- `update_category` - Update an existing category
+
+**Category Groups:**
+- `create_category_group` - Create a new category group
+- `update_category_group` - Update a category group
+
+**Payees:**
+- `get_payees` - List all payees for a plan
+- `get_payee` - Get a specific payee
+- `create_payee` - Create a new payee
+- `update_payee` - Update a payee
+
+**Months:**
+- `get_months` - List all months for a plan
+- `get_month` - Get a specific month
+
+**Transactions:**
+- `get_transactions` - Get transactions for a plan (with filters)
+- `get_transaction` - Get a specific transaction
+- `create_transaction` - Create a new transaction
+- `update_transaction` - Update a transaction
+- `update_transactions` - Update multiple transactions
+- `delete_transaction` - Delete a transaction
+- `import_transactions` - Import transactions from linked accounts
+
+**Scheduled Transactions:**
+- `get_scheduled_transactions` - List all scheduled transactions
+- `get_scheduled_transaction` - Get a specific scheduled transaction
+- `create_scheduled_transaction` - Create a new scheduled transaction
+- `update_scheduled_transaction` - Update a scheduled transaction
+- `delete_scheduled_transaction` - Delete a scheduled transaction
 
 ### Example MCP Tool Calls
 
-**Get Budget:**
+**Get User:**
 ```json
 {
-  "budget_id": "your-budget-id"
+  "name": "get_user",
+  "arguments": {}
+}
+```
+
+**Get Plans:**
+```json
+{
+  "name": "get_plans",
+  "arguments": {
+    "include_accounts": true
+  }
+}
+```
+
+**Get Plan:**
+```json
+{
+  "name": "get_plan",
+  "arguments": {
+    "plan_id": "your-plan-id"
+  }
 }
 ```
 
 **Get Transactions:**
 ```json
 {
-  "budget_id": "your-budget-id",
-  "account_id": "your-account-id",
-  "since_date": "2024-01-01"
+  "name": "get_transactions",
+  "arguments": {
+    "plan_id": "your-plan-id",
+    "since_date": "2024-01-01",
+    "type": "uncategorized"
+  }
 }
 ```
 
 **Create Transaction:**
 ```json
 {
-  "budget_id": "your-budget-id",
-  "transaction": {
-    "account_id": "your-account-id",
-    "date": "2024-01-15",
-    "amount": 100000,
-    "payee_name": "Grocery Store",
-    "category_id": "your-category-id",
-    "memo": "Weekly groceries",
-    "cleared": "cleared",
-    "approved": true
+  "name": "create_transaction",
+  "arguments": {
+    "plan_id": "your-plan-id",
+    "transaction": {
+      "account_id": "your-account-id",
+      "date": "2024-01-15",
+      "amount": 100000,
+      "payee_name": "Grocery Store",
+      "category_id": "your-category-id",
+      "memo": "Weekly groceries",
+      "cleared": "cleared",
+      "approved": true
+    }
   }
 }
 ```
 
-Note: Amounts are in milliunits (e.g., $100 = 100000).
+**Update Month Category Budget:**
+```json
+{
+  "name": "update_month_category",
+  "arguments": {
+    "plan_id": "your-plan-id",
+    "month": "2024-01-01",
+    "category_id": "your-category-id",
+    "budgeted": 500000
+  }
+}
+```
+
+> **Note**: All currency amounts are in **milliunits** format (e.g., $100 = 100000, $1 = 1000).
+
+### MCP Resources
+
+List all available resources:
+```json
+{
+  "method": "resources/list",
+  "params": {}
+}
+```
+
+Read a specific resource:
+```json
+{
+  "method": "resources/read",
+  "params": {
+    "uri": "ynab://plan/your-plan-id"
+  }
+}
+```
+
+Write to a resource (create/update):
+```json
+{
+  "method": "resources/write",
+  "params": {
+    "uri": "ynab://plan/your-plan-id/transactions",
+    "content": "{\"transaction\": {\"account_id\": \"...\", \"amount\": 100000}}"
+  }
+}
+```
+
+## REST API Endpoints
+
+For direct HTTP access (in addition to MCP JSON-RPC):
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/mcp/health` | Health check |
+| GET | `/mcp/info` | Server info and capabilities |
 
 ## Project Structure
 
@@ -190,13 +331,34 @@ Note: Amounts are in milliunits (e.g., $100 = 100000).
 mistral-ynab-connector/
 ├── main.py              # Server entry point
 ├── config.py            # Configuration management
-├── mcp_server.py        # FastAPI application with endpoints
-├── ynab_client.py       # YNAB API client
+├── mcp_server.py        # FastAPI application with MCP JSON-RPC endpoints
+├── ynab_client.py       # YNAB API v1.85.0 client (aligned with official spec)
+├── api-1.json           # YNAB OpenAPI specification v1.85.0
 ├── pyproject.toml       # Project configuration
 ├── .env.example         # Environment template
 ├── .gitignore
 └── README.md
 ```
+
+## Data Format Notes
+
+### Currency Amounts
+- All monetary values use **milliunits** format (integer)
+- Example: $1.23 = 1230, $100 = 100000
+- Formatted values (e.g., `balance_formatted`) are also available in responses
+
+### Dates
+- ISO 8601 format: `YYYY-MM-DD`
+- Special value: `"current"` for current month
+- Date-time format: `YYYY-MM-DDTHH:MM:SSZ`
+
+### IDs
+- Plans: UUID string or special values (`"last-used"`, `"default"`)
+- Accounts: UUID string
+- Categories: UUID string
+- Payees: UUID string
+- Transactions: String ID
+- Scheduled Transactions: String ID
 
 ## Development
 
@@ -218,11 +380,23 @@ uv run pytest
 uv run ruff check .
 ```
 
-## License
+## API Compliance
 
-This project is provided as-is for use with Mistral and YNAB.
+This connector is **fully aligned** with the official YNAB API v1.85.0 OpenAPI specification.
+
+- ✅ Uses `/plans/` terminology (not `/budgets/`)
+- ✅ Uses `plan_id` parameter (not `budget_id`)
+- ✅ Supports special values: `"last-used"`, `"default"`
+- ✅ Implements all major YNAB API endpoints
+- ✅ Follows YNAB's milliunits currency format
+- ✅ Uses `api.ynab.com` base URL
 
 ## YNAB API Documentation
 
-For more information on the YNAB API, see:
-https://api.youneedabudget.com/
+For more information on the YNAB API v1.85.0, see:
+- https://api.ynab.com
+- [api-1.json](./api-1.json) (included in this repository)
+
+## License
+
+This project is provided as-is for use with Mistral and YNAB.

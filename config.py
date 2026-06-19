@@ -14,7 +14,7 @@ class Settings(BaseSettings):
 
     # YNAB API Configuration
     ynab_api_key: str = ""
-    ynab_api_url: str = "https://api.youneedabudget.com/v1"
+    ynab_api_url: str = "https://api.ynab.com/v1"
 
     # Server Configuration
     server_host: str = "0.0.0.0"
