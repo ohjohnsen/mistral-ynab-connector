@@ -30,8 +30,10 @@ def mock_settings(monkeypatch):
         mcp_version="0.1.0",
     )
     
-    # Override the global settings
+    # Override the global settings in all modules that import it
     monkeypatch.setattr("config.settings", test_settings)
+    monkeypatch.setattr("mcp_server.settings", test_settings)
+    monkeypatch.setattr("ynab_client.settings", test_settings)
     return test_settings
 
 
