@@ -1,5 +1,7 @@
 """Configuration management for YNAB MCP Connector."""
 
+from __future__ import annotations
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 

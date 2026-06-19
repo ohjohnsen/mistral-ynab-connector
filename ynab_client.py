@@ -4,6 +4,8 @@ This client implements the YNAB API v1.85.0 as documented in their OpenAPI spec.
 All endpoints use /plans/ terminology and follow the official API structure.
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 import httpx

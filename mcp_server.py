@@ -6,6 +6,8 @@ YNAB functionality to the Model Context Protocol using JSON-RPC 2.0.
 All endpoints use the official YNAB API v1.85.0 terminology (/plans/ not /budgets/).
 """
 
+from __future__ import annotations
+
 from contextlib import asynccontextmanager
 from datetime import datetime
 import json
