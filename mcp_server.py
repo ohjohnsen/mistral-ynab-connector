@@ -1,13 +1,14 @@
 """MCP Server implementation for YNAB Connector.
 
 This module provides the FastAPI-based MCP server that exposes
-YNAB functionality to the Model Context Protocol.
+YNAB functionality to the Model Context Protocol using JSON-RPC 2.0.
 """
 
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 
 from config import settings
 from ynab_client import YNABClient
@@ -71,7 +72,7 @@ async def lifespan(app: FastAPI):
     yield
     # Shutdown
     if _ynab_client:
-        await _ynab_client.close()
+        _ynab_client.close()
 
 
 # Create FastAPI application
@@ -83,38 +84,341 @@ app = FastAPI(
 )
 
 
-# MCP Standard Endpoints
+# ============================================================================
+# MCP JSON-RPC 2.0 Protocol Endpoint
+# ============================================================================
+
+MCP_PROTOCOL_VERSION = "2024-11-05"
 
 
 @app.post("/mcp")
-async def mcp_root() -> dict[str, Any]:
-    """Root MCP endpoint for protocol compatibility."""
+async def mcp_handler(request: Request) -> JSONResponse:
+    """Handle MCP JSON-RPC 2.0 requests.
+    
+    This endpoint implements the Model Context Protocol specification.
+    https://github.com/modelcontextprotocol/specification
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "jsonrpc": "2.0",
+                "error": {
+                    "code": -32600,
+                    "message": "Invalid JSON",
+                },
+                "id": None,
+            },
+        )
+    
+    # Handle batch requests
+    if isinstance(body, list):
+        results = []
+        for req in body:
+            result = await _handle_rpc_request(req)
+            results.append(result)
+        return JSONResponse(content=results)
+    
+    # Handle single request
+    result = await _handle_rpc_request(body)
+    return JSONResponse(content=result)
+
+
+async def _handle_rpc_request(request: dict[str, Any]) -> dict[str, Any]:
+    """Handle a single JSON-RPC 2.0 request."""
+    request_id = request.get("id")
+    method = request.get("method")
+    params = request.get("params", {})
+    
+    try:
+        if method == "initialize":
+            result = await _handle_initialize(params, request_id)
+        elif method == "tools/list":
+            result = await _handle_tools_list(params, request_id)
+        elif method == "tools/call":
+            result = await _handle_tools_call(params, request_id)
+        elif method == "resources/list":
+            result = await _handle_resources_list(params, request_id)
+        elif method == "resources/read":
+            result = await _handle_resources_read(params, request_id)
+        else:
+            result = {
+                "jsonrpc": "2.0",
+                "error": {
+                    "code": -32601,
+                    "message": f"Method not found: {method}",
+                },
+                "id": request_id,
+            }
+        
+        return result
+    
+    except HTTPException as e:
+        return {
+            "jsonrpc": "2.0",
+            "error": {
+                "code": -32000,
+                "message": e.detail,
+            },
+            "id": request_id,
+        }
+    except Exception as e:
+        return {
+            "jsonrpc": "2.0",
+            "error": {
+                "code": -32603,
+                "message": str(e),
+            },
+            "id": request_id,
+        }
+
+
+async def _handle_initialize(
+    params: dict[str, Any], request_id: Any
+) -> dict[str, Any]:
+    """Handle MCP initialize request."""
+    client_info = params.get("clientInfo", {})
+    
     return {
-        "name": settings.mcp_name,
-        "version": settings.mcp_version,
-        "description": "YNAB MCP Connector - Interact with You Need A Budget API",
-        "capabilities": {
-            "budgets": {"read": True},
-            "categories": {"read": True},
-            "accounts": {"read": True},
-            "transactions": {"read": True, "write": True},
-        },
-        "endpoints": {
-            "health": "/mcp/health",
-            "info": "/mcp/info",
-            "resources": {
-                "budgets": "/mcp/resources/budgets",
-                "accounts": "/mcp/resources/budgets/{budget_id}/accounts",
-                "categories": "/mcp/resources/budgets/{budget_id}/categories",
+        "jsonrpc": "2.0",
+        "result": {
+            "protocolVersion": MCP_PROTOCOL_VERSION,
+            "capabilities": {
+                "tools": {},
+                "resources": {
+                    "list": {},
+                    "read": {
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "uri": {"type": "string"},
+                            },
+                            "required": ["uri"],
+                        }
+                    },
+                },
             },
-            "tools": {
-                "get_budget": "/mcp/tools/get_budget",
-                "get_transactions": "/mcp/tools/get_transactions",
-                "create_transaction": "/mcp/tools/create_transaction",
+            "serverInfo": {
+                "name": settings.mcp_name,
+                "version": settings.mcp_version,
             },
         },
+        "id": request_id,
     }
 
+
+async def _handle_tools_list(
+    params: dict[str, Any], request_id: Any
+) -> dict[str, Any]:
+    """Handle MCP tools/list request."""
+    tools = [
+        {
+            "name": "get_budget",
+            "description": "Get details for a specific YNAB budget",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "budget_id": {
+                        "type": "string",
+                        "description": "The YNAB budget ID",
+                    },
+                },
+                "required": ["budget_id"],
+            },
+        },
+        {
+            "name": "get_transactions",
+            "description": "Get transactions for a budget, optionally filtered",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "budget_id": {"type": "string", "description": "The YNAB budget ID"},
+                    "account_id": {"type": "string", "description": "Optional account ID filter"},
+                    "since_date": {"type": "string", "description": "Get transactions since date (YYYY-MM-DD)"},
+                },
+                "required": ["budget_id"],
+            },
+        },
+        {
+            "name": "create_transaction",
+            "description": "Create a new transaction in YNAB",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "budget_id": {"type": "string", "description": "The YNAB budget ID"},
+                    "transaction": {
+                        "type": "object",
+                        "description": "Transaction data following YNAB API format",
+                    },
+                },
+                "required": ["budget_id", "transaction"],
+            },
+        },
+    ]
+    
+    return {
+        "jsonrpc": "2.0",
+        "result": {
+            "tools": tools,
+        },
+        "id": request_id,
+    }
+
+
+async def _handle_tools_call(
+    params: dict[str, Any], request_id: Any
+) -> dict[str, Any]:
+    """Handle MCP tools/call request."""
+    name = params.get("name")
+    arguments = params.get("arguments", {})
+    
+    client = YNABClient(api_key=settings.ynab_api_key)
+    
+    try:
+        if name == "get_budget":
+            budget_id = arguments.get("budget_id")
+            if not budget_id:
+                return {
+                    "jsonrpc": "2.0",
+                    "error": {"code": -32602, "message": "budget_id is required"},
+                    "id": request_id,
+                }
+            budget = await client.get_budget(budget_id)
+            content = [{"type": "text", "text": str(budget)}]
+        
+        elif name == "get_transactions":
+            budget_id = arguments.get("budget_id")
+            account_id = arguments.get("account_id")
+            since_date = arguments.get("since_date")
+            if not budget_id:
+                return {
+                    "jsonrpc": "2.0",
+                    "error": {"code": -32602, "message": "budget_id is required"},
+                    "id": request_id,
+                }
+            transactions = await client.get_transactions(budget_id, account_id, since_date)
+            content = [{"type": "text", "text": str(transactions)}]
+        
+        elif name == "create_transaction":
+            budget_id = arguments.get("budget_id")
+            transaction_data = arguments.get("transaction")
+            if not budget_id:
+                return {
+                    "jsonrpc": "2.0",
+                    "error": {"code": -32602, "message": "budget_id is required"},
+                    "id": request_id,
+                }
+            if not transaction_data:
+                return {
+                    "jsonrpc": "2.0",
+                    "error": {"code": -32602, "message": "transaction data is required"},
+                    "id": request_id,
+                }
+            result = await client.create_transaction(budget_id, transaction_data)
+            content = [{"type": "text", "text": f"Created transaction: {result}"}]
+        
+        else:
+            return {
+                "jsonrpc": "2.0",
+                "error": {"code": -32601, "message": f"Tool not found: {name}"},
+                "id": request_id,
+            }
+        
+        return {
+            "jsonrpc": "2.0",
+            "result": {
+                "content": content,
+            },
+            "id": request_id,
+        }
+    
+    finally:
+        client.close()
+
+
+async def _handle_resources_list(
+    params: dict[str, Any], request_id: Any
+) -> dict[str, Any]:
+    """Handle MCP resources/list request."""
+    client = YNABClient(api_key=settings.ynab_api_key)
+    
+    try:
+        budgets = await client.get_budgets()
+        
+        resources = []
+        for budget in budgets.get("data", {}).get("budgets", []):
+            resources.append({
+                "uri": f"ynab://budget/{budget['id']}",
+                "name": budget.get("name", "Unknown Budget"),
+                "description": f"YNAB Budget: {budget.get('name', '')}",
+                "mimeType": "application/json",
+            })
+        
+        return {
+            "jsonrpc": "2.0",
+            "result": {
+                "resources": resources,
+            },
+            "id": request_id,
+        }
+    
+    finally:
+        client.close()
+
+
+async def _handle_resources_read(
+    params: dict[str, Any], request_id: Any
+) -> dict[str, Any]:
+    """Handle MCP resources/read request."""
+    uri = params.get("uri")
+    
+    if not uri:
+        return {
+            "jsonrpc": "2.0",
+            "error": {"code": -32602, "message": "uri is required"},
+            "id": request_id,
+        }
+    
+    client = YNABClient(api_key=settings.ynab_api_key)
+    
+    try:
+        # Parse the URI
+        if uri.startswith("ynab://budget/"):
+            budget_id = uri.replace("ynab://budget/", "")
+            data = await client.get_budget(budget_id)
+        elif uri.startswith("ynab://account/"):
+            # Accounts need budget context, but we'll just return the URI for now
+            data = {"uri": uri, "type": "account"}
+        elif uri.startswith("ynab://category/"):
+            data = {"uri": uri, "type": "category"}
+        else:
+            return {
+                "jsonrpc": "2.0",
+                "error": {"code": -32602, "message": f"Unsupported URI: {uri}"},
+                "id": request_id,
+            }
+        
+        return {
+            "jsonrpc": "2.0",
+            "result": [
+                {
+                    "uri": uri,
+                    "mimeType": "application/json",
+                    "text": str(data),
+                }
+            ],
+            "id": request_id,
+        }
+    
+    finally:
+        client.close()
+
+
+# ============================================================================
+# REST API Endpoints (for backward compatibility)
+# ============================================================================
 
 @app.get("/mcp/health")
 async def health_check() -> dict[str, str]:
@@ -138,7 +442,7 @@ async def mcp_info() -> dict[str, Any]:
     }
 
 
-# YNAB API Endpoints
+# YNAB API Endpoints (REST)
 
 
 @app.get("/api/budgets")
@@ -210,113 +514,3 @@ async def create_transaction(
     }
     """
     return await client.create_transaction(budget_id, transaction)
-
-
-# MCP Resource Endpoints (for resource access)
-
-
-@app.get("/mcp/resources/budgets")
-async def mcp_list_budgets(
-    client: YNABClient = Depends(get_ynab_client),
-) -> dict[str, Any]:
-    """MCP endpoint to list budgets as resources."""
-    budgets = await client.get_budgets()
-    return {
-        "resources": [
-            {
-                "uri": f"ynab://budget/{budget['id']}",
-                "name": budget["name"],
-                "type": "budget",
-                "budget": budget,
-            }
-            for budget in budgets.get("data", {}).get("budgets", [])
-        ]
-    }
-
-
-@app.get("/mcp/resources/budgets/{budget_id}/accounts")
-async def mcp_list_accounts(
-    budget_id: str,
-    client: YNABClient = Depends(get_ynab_client),
-) -> dict[str, Any]:
-    """MCP endpoint to list accounts as resources."""
-    accounts = await client.get_accounts(budget_id)
-    return {
-        "resources": [
-            {
-                "uri": f"ynab://account/{account['id']}",
-                "name": account["name"],
-                "type": "account",
-                "account": account,
-            }
-            for account in accounts.get("data", {}).get("accounts", [])
-        ]
-    }
-
-
-@app.get("/mcp/resources/budgets/{budget_id}/categories")
-async def mcp_list_categories(
-    budget_id: str,
-    client: YNABClient = Depends(get_ynab_client),
-) -> dict[str, Any]:
-    """MCP endpoint to list categories as resources."""
-    categories = await client.get_categories(budget_id)
-    return {
-        "resources": [
-            {
-                "uri": f"ynab://category/{category['id']}",
-                "name": category["name"],
-                "type": "category",
-                "category": category,
-            }
-            for category in categories.get("data", {}).get("category_groups", [])
-            for category in category.get("categories", [])
-        ]
-    }
-
-
-# MCP Tool Endpoints
-
-
-@app.post("/mcp/tools/get_budget")
-async def mcp_get_budget_tool(
-    body: dict[str, Any],
-    client: YNABClient = Depends(get_ynab_client),
-) -> dict[str, Any]:
-    """MCP tool to get budget details."""
-    budget_id = body.get("budget_id")
-    if not budget_id:
-        raise HTTPException(status_code=400, detail="budget_id is required")
-    budget = await client.get_budget(budget_id)
-    return {"content": [{"type": "text", "text": str(budget)}]}
-
-
-@app.post("/mcp/tools/get_transactions")
-async def mcp_get_transactions_tool(
-    body: dict[str, Any],
-    client: YNABClient = Depends(get_ynab_client),
-) -> dict[str, Any]:
-    """MCP tool to get transactions."""
-    budget_id = body.get("budget_id")
-    account_id = body.get("account_id")
-    since_date = body.get("since_date")
-    if not budget_id:
-        raise HTTPException(status_code=400, detail="budget_id is required")
-    transactions = await client.get_transactions(budget_id, account_id, since_date)
-    return {"content": [{"type": "text", "text": str(transactions)}]}
-
-
-@app.post("/mcp/tools/create_transaction")
-async def mcp_create_transaction_tool(
-    body: dict[str, Any],
-    client: YNABClient = Depends(get_ynab_client),
-) -> dict[str, Any]:
-    """MCP tool to create a transaction."""
-    budget_id = body.get("budget_id")
-    transaction_data = body.get("transaction")
-    if not budget_id:
-        raise HTTPException(status_code=400, detail="budget_id is required")
-    if not transaction_data:
-        raise HTTPException(status_code=400, detail="transaction data is required")
-    result = await client.create_transaction(budget_id, transaction_data)
-    return {"content": [{"type": "text", "text": f"Created transaction: {result}"}]}
