@@ -14,7 +14,7 @@ jobs:
   check-version:
     name: Check Version Uniqueness
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    if: github.event_name == 'pull_request' && github.base_ref == 'main' || github.event_name == 'push' && github.ref == 'refs/heads/main'
     
     steps:
       - name: Checkout repository
