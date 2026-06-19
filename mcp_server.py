@@ -85,6 +85,37 @@ app = FastAPI(
 
 
 # ============================================================================
+# MCP Server Discovery Endpoint
+# ============================================================================
+
+@app.get("/.well-known/mcp/server-card/mcp")
+async def server_card() -> dict[str, Any]:
+    """MCP Server Card for discovery.
+    
+    This endpoint allows MCP clients to discover the server.
+    https://github.com/modelcontextprotocol/specification/blob/main/specification/Server%20Card.md
+    """
+    return {
+        "name": settings.mcp_name,
+        "description": "YNAB MCP Connector - Interact with You Need A Budget API",
+        "version": settings.mcp_version,
+        "url": "/mcp",
+        "auth": {
+            "type": "api_key",
+            "headerName": "Authorization",
+            "description": "Provide YNAB API key as Bearer token",
+        },
+        "capabilities": {
+            "tools": {},
+            "resources": {
+                "list": {},
+                "read": {},
+            },
+        },
+    }
+
+
+# ============================================================================
 # MCP JSON-RPC 2.0 Protocol Endpoint
 # ============================================================================
 
