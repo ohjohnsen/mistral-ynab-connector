@@ -7,19 +7,50 @@ YNAB functionality to the Model Context Protocol.
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 
 from config import settings
 from ynab_client import YNABClient
 
-# Global YNAB client instance
+# Global YNAB client instance (for backward compatibility with env var)
 _ynab_client: YNABClient | None = None
 
 
-def get_ynab_client() -> YNABClient:
-    """Get or create the YNAB client instance."""
+def get_ynab_api_key(
+    authorization: str | None = Header(default=None),
+) -> str:
+    """Extract YNAB API key from Authorization header or settings.
+    
+    Supports MCP authentication via Bearer token in Authorization header.
+    Falls back to YNAB_API_KEY environment variable.
+    """
+    if authorization:
+        # Extract token from "Bearer <token>" header
+        if authorization.startswith("Bearer "):
+            return authorization[7:]
+        return authorization
+    
+    if settings.ynab_api_key:
+        return settings.ynab_api_key
+    
+    raise HTTPException(
+        status_code=401,
+        detail="Authentication required. Provide YNAB_API_KEY via Authorization header or environment variable.",
+    )
+
+
+def get_ynab_client(
+    api_key: str = Depends(get_ynab_api_key),
+) -> YNABClient:
+    """Get or create the YNAB client instance with the provided API key."""
     global _ynab_client
+    
+    # If we have a header-based API key, create a new client for this request
+    # This allows different MCP clients to use different YNAB tokens
+    if api_key != settings.ynab_api_key:
+        return YNABClient(api_key=api_key)
+    
+    # Otherwise use the global client (for env var based auth)
     if _ynab_client is None:
         if not settings.ynab_api_key:
             raise HTTPException(
@@ -81,30 +112,37 @@ async def mcp_info() -> dict[str, Any]:
 
 
 @app.get("/api/budgets")
-async def list_budgets() -> dict[str, Any]:
+async def list_budgets(
+    client: YNABClient = Depends(get_ynab_client),
+) -> dict[str, Any]:
     """List all accessible YNAB budgets."""
-    client = get_ynab_client()
     return await client.get_budgets()
 
 
 @app.get("/api/budgets/{budget_id}")
-async def get_budget(budget_id: str) -> dict[str, Any]:
+async def get_budget(
+    budget_id: str,
+    client: YNABClient = Depends(get_ynab_client),
+) -> dict[str, Any]:
     """Get details for a specific budget."""
-    client = get_ynab_client()
     return await client.get_budget(budget_id)
 
 
 @app.get("/api/budgets/{budget_id}/categories")
-async def list_categories(budget_id: str) -> dict[str, Any]:
+async def list_categories(
+    budget_id: str,
+    client: YNABClient = Depends(get_ynab_client),
+) -> dict[str, Any]:
     """List all categories for a budget."""
-    client = get_ynab_client()
     return await client.get_categories(budget_id)
 
 
 @app.get("/api/budgets/{budget_id}/accounts")
-async def list_accounts(budget_id: str) -> dict[str, Any]:
+async def list_accounts(
+    budget_id: str,
+    client: YNABClient = Depends(get_ynab_client),
+) -> dict[str, Any]:
     """List all accounts for a budget."""
-    client = get_ynab_client()
     return await client.get_accounts(budget_id)
 
 
@@ -113,9 +151,9 @@ async def list_transactions(
     budget_id: str,
     account_id: str | None = Query(default=None, description="Filter by account ID"),
     since_date: str | None = Query(default=None, description="Get transactions since date (YYYY-MM-DD)"),
+    client: YNABClient = Depends(get_ynab_client),
 ) -> dict[str, Any]:
     """List transactions for a budget, optionally filtered by account and date."""
-    client = get_ynab_client()
     return await client.get_transactions(budget_id, account_id, since_date)
 
 
@@ -123,6 +161,7 @@ async def list_transactions(
 async def create_transaction(
     budget_id: str,
     transaction: dict[str, Any],
+    client: YNABClient = Depends(get_ynab_client),
 ) -> dict[str, Any]:
     """Create a new transaction.
 
@@ -140,7 +179,6 @@ async def create_transaction(
         "flag_color": "red|orange|yellow|green|blue|purple"
     }
     """
-    client = get_ynab_client()
     return await client.create_transaction(budget_id, transaction)
 
 
@@ -148,9 +186,10 @@ async def create_transaction(
 
 
 @app.get("/mcp/resources/budgets")
-async def mcp_list_budgets() -> dict[str, Any]:
+async def mcp_list_budgets(
+    client: YNABClient = Depends(get_ynab_client),
+) -> dict[str, Any]:
     """MCP endpoint to list budgets as resources."""
-    client = get_ynab_client()
     budgets = await client.get_budgets()
     return {
         "resources": [
@@ -166,9 +205,11 @@ async def mcp_list_budgets() -> dict[str, Any]:
 
 
 @app.get("/mcp/resources/budgets/{budget_id}/accounts")
-async def mcp_list_accounts(budget_id: str) -> dict[str, Any]:
+async def mcp_list_accounts(
+    budget_id: str,
+    client: YNABClient = Depends(get_ynab_client),
+) -> dict[str, Any]:
     """MCP endpoint to list accounts as resources."""
-    client = get_ynab_client()
     accounts = await client.get_accounts(budget_id)
     return {
         "resources": [
@@ -184,9 +225,11 @@ async def mcp_list_accounts(budget_id: str) -> dict[str, Any]:
 
 
 @app.get("/mcp/resources/budgets/{budget_id}/categories")
-async def mcp_list_categories(budget_id: str) -> dict[str, Any]:
+async def mcp_list_categories(
+    budget_id: str,
+    client: YNABClient = Depends(get_ynab_client),
+) -> dict[str, Any]:
     """MCP endpoint to list categories as resources."""
-    client = get_ynab_client()
     categories = await client.get_categories(budget_id)
     return {
         "resources": [
@@ -206,31 +249,38 @@ async def mcp_list_categories(budget_id: str) -> dict[str, Any]:
 
 
 @app.post("/mcp/tools/get_budget")
-async def mcp_get_budget_tool(body: dict[str, Any]) -> dict[str, Any]:
+async def mcp_get_budget_tool(
+    body: dict[str, Any],
+    client: YNABClient = Depends(get_ynab_client),
+) -> dict[str, Any]:
     """MCP tool to get budget details."""
     budget_id = body.get("budget_id")
     if not budget_id:
         raise HTTPException(status_code=400, detail="budget_id is required")
-    client = get_ynab_client()
     budget = await client.get_budget(budget_id)
     return {"content": [{"type": "text", "text": str(budget)}]}
 
 
 @app.post("/mcp/tools/get_transactions")
-async def mcp_get_transactions_tool(body: dict[str, Any]) -> dict[str, Any]:
+async def mcp_get_transactions_tool(
+    body: dict[str, Any],
+    client: YNABClient = Depends(get_ynab_client),
+) -> dict[str, Any]:
     """MCP tool to get transactions."""
     budget_id = body.get("budget_id")
     account_id = body.get("account_id")
     since_date = body.get("since_date")
     if not budget_id:
         raise HTTPException(status_code=400, detail="budget_id is required")
-    client = get_ynab_client()
     transactions = await client.get_transactions(budget_id, account_id, since_date)
     return {"content": [{"type": "text", "text": str(transactions)}]}
 
 
 @app.post("/mcp/tools/create_transaction")
-async def mcp_create_transaction_tool(body: dict[str, Any]) -> dict[str, Any]:
+async def mcp_create_transaction_tool(
+    body: dict[str, Any],
+    client: YNABClient = Depends(get_ynab_client),
+) -> dict[str, Any]:
     """MCP tool to create a transaction."""
     budget_id = body.get("budget_id")
     transaction_data = body.get("transaction")
@@ -238,6 +288,5 @@ async def mcp_create_transaction_tool(body: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="budget_id is required")
     if not transaction_data:
         raise HTTPException(status_code=400, detail="transaction data is required")
-    client = get_ynab_client()
     result = await client.create_transaction(budget_id, transaction_data)
     return {"content": [{"type": "text", "text": f"Created transaction: {result}"}]}

@@ -117,6 +117,6 @@ class YNABClient:
             json_data={"transaction": transaction_data},
         )
 
-    async def close(self) -> None:
+    def close(self) -> None:
         """Close the HTTP client."""
-        await self._client.aclose()
+        self._client.close()
