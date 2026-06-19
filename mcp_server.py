@@ -1312,7 +1312,6 @@ async def _handle_resources_write(
     client = YNABClient(api_key=settings.ynab_api_key)
     
     try:
-        import json
         data = json.loads(content)
         
         # Parse the URI and perform write operation
@@ -1373,7 +1372,7 @@ async def _handle_resources_write(
             "jsonrpc": "2.0",
             "result": {
                 "uri": uri,
-                "text": str(result),
+                "text": json.dumps(result),
             },
             "id": request_id,
         }
