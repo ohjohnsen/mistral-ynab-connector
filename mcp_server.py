@@ -392,6 +392,247 @@ async def _handle_tools_list(
     params: dict[str, Any], request_id: Any
 ) -> dict[str, Any]:
     """Handle MCP tools/list request."""
+    
+    # ==========================================================================
+    # Schema Definitions for Tool Input/Output Types
+    # ==========================================================================
+    
+    # Account Schema
+    account_schema = {
+        "type": "object",
+        "properties": {
+            "id": {"type": "string", "description": "Unique identifier for the account"},
+            "name": {"type": "string", "description": "Name of the account"},
+            "type": {
+                "type": "string",
+                "enum": ["CHECKING", "SAVINGS", "CASH", "CREDIT_CARD", "LINE_OF_CREDIT", "OTHER_ASSET", "OTHER_LIABILITY"],
+                "description": "Type of account"
+            },
+            "balance": {
+                "type": "integer",
+                "description": "Current balance in milliunits (1/1000 of currency unit)",
+                "examples": [100000]
+            },
+            "cleared_balance": {
+                "type": "integer",
+                "description": "Cleared balance in milliunits"
+            },
+            "uncleared_balance": {
+                "type": "integer",
+                "description": "Uncleared balance in milliunits"
+            },
+            "closed": {"type": "boolean", "description": "Whether the account is closed"},
+            "note": {"type": "string", "description": "Optional note for the account"},
+            "on_budget": {"type": "boolean", "description": "Whether the account is on budget"},
+        },
+        "required": ["name", "type", "balance"],
+    }
+    
+    # Category Schema
+    category_schema = {
+        "type": "object",
+        "properties": {
+            "id": {"type": "string", "description": "Unique identifier for the category"},
+            "name": {"type": "string", "description": "Name of the category"},
+            "hidden": {"type": "boolean", "description": "Whether the category is hidden"},
+            "original_category_group_id": {
+                "type": "string",
+                "description": "ID of the original category group"
+            },
+            "note": {"type": "string", "description": "Optional note for the category"},
+        },
+        "required": ["name"],
+    }
+    
+    # Category Group Schema
+    category_group_schema = {
+        "type": "object",
+        "properties": {
+            "id": {"type": "string", "description": "Unique identifier for the category group"},
+            "name": {"type": "string", "description": "Name of the category group"},
+            "hidden": {"type": "boolean", "description": "Whether the category group is hidden"},
+            "categories": {
+                "type": "array",
+                "items": category_schema,
+                "description": "List of categories in this group"
+            },
+        },
+        "required": ["name"],
+    }
+    
+    # Transaction Schema
+    transaction_schema = {
+        "type": "object",
+        "properties": {
+            "id": {"type": "string", "description": "Unique identifier for the transaction"},
+            "date": {
+                "type": "string",
+                "format": "date",
+                "description": "Transaction date in YYYY-MM-DD format",
+                "examples": ["2024-01-15"]
+            },
+            "amount": {
+                "type": "integer",
+                "description": "Transaction amount in milliunits (positive for inflow, negative for outflow)",
+                "examples": [100000, -50000]
+            },
+            "memo": {"type": "string", "description": "Memo or description for the transaction"},
+            "cleared": {
+                "type": "string",
+                "enum": ["cleared", "uncleared", "reconciled"],
+                "description": "Cleared status of the transaction"
+            },
+            "approved": {"type": "boolean", "description": "Whether the transaction is approved"},
+            "flag_color": {
+                "type": "string",
+                "enum": ["red", "orange", "yellow", "green", "blue", "purple", "pink", "brown", "grey", "black", null],
+                "description": "Color flag for the transaction"
+            },
+            "account_id": {"type": "string", "description": "ID of the account the transaction belongs to"},
+            "payee_id": {"type": "string", "description": "ID of the payee (if linked)"},
+            "payee_name": {"type": "string", "description": "Name of the payee"},
+            "category_id": {"type": "string", "description": "ID of the category"},
+            "category_name": {"type": "string", "description": "Name of the category"},
+            "subtransactions": {
+                "type": "array",
+                "items": {"type": "object"},
+                "description": "List of subtransactions (for split transactions)"
+            },
+            "transaction_type": {
+                "type": "string",
+                "description": "Type of transaction"
+            },
+            "import_id": {"type": "string", "description": "Import ID for imported transactions"},
+        },
+        "required": ["date", "amount"],
+    }
+    
+    # Scheduled Transaction Schema
+    scheduled_transaction_schema = {
+        "type": "object",
+        "properties": {
+            "id": {"type": "string", "description": "Unique identifier for the scheduled transaction"},
+            "date_first": {
+                "type": "string",
+                "format": "date",
+                "description": "First date of the scheduled transaction in YYYY-MM-DD format",
+                "examples": ["2024-01-15"]
+            },
+            "date_next": {
+                "type": "string",
+                "format": "date",
+                "description": "Next occurrence date in YYYY-MM-DD format"
+            },
+            "frequency": {
+                "type": "string",
+                "enum": ["daily", "weekly", "everyOtherWeek", "twiceAMonth", "every4Weeks", "monthly", "everyOtherMonth", "every3Months", "every6Months", "yearly", "everyOtherYear", "never"],
+                "description": "How often the transaction occurs"
+            },
+            "amount": {
+                "type": "integer",
+                "description": "Amount in milliunits",
+                "examples": [100000]
+            },
+            "memo": {"type": "string", "description": "Memo or description"},
+            "flag_color": {
+                "type": "string",
+                "enum": ["red", "orange", "yellow", "green", "blue", "purple", "pink", "brown", "grey", "black", null],
+                "description": "Color flag"
+            },
+            "account_id": {"type": "string", "description": "ID of the account"},
+            "payee_id": {"type": "string", "description": "ID of the payee"},
+            "category_id": {"type": "string", "description": "ID of the category"},
+            "category_name": {"type": "string", "description": "Name of the category"},
+            "subtransactions": {
+                "type": "array",
+                "items": {"type": "object"},
+                "description": "List of subtransactions"
+            },
+            "weeks_offset": {"type": "integer", "description": "Week offset for frequency"},
+            "days_offset": {"type": "integer", "description": "Day offset for frequency"},
+        },
+        "required": ["date_first", "frequency", "amount"],
+    }
+    
+    # Payee Schema
+    payee_schema = {
+        "type": "object",
+        "properties": {
+            "id": {"type": "string", "description": "Unique identifier for the payee"},
+            "name": {"type": "string", "description": "Name of the payee"},
+            "transfer_account_id": {
+                "type": "string",
+                "description": "Account ID if this is a transfer payee"
+            },
+            "deleted": {"type": "boolean", "description": "Whether the payee is deleted"},
+        },
+        "required": ["name"],
+    }
+    
+    # Plan Schema (simplified for input)
+    plan_schema = {
+        "type": "object",
+        "properties": {
+            "id": {"type": "string", "description": "Unique identifier for the plan"},
+            "name": {"type": "string", "description": "Name of the plan"},
+        },
+    }
+    
+    # Month Schema
+    month_schema = {
+        "type": "object",
+        "properties": {
+            "month": {
+                "type": "string",
+                "format": "date",
+                "description": "Month identifier in YYYY-MM-DD format",
+                "examples": ["2024-01-01"]
+            },
+            "note": {"type": "string", "description": "Optional note for the month"},
+            "to_be_budgeted": {
+                "type": "integer",
+                "description": "Amount to be budgeted in milliunits"
+            },
+            "age_of_money": {
+                "type": "integer",
+                "description": "Age of money in days"
+            },
+            "categories": {
+                "type": "array",
+                "items": {"type": "object"},
+                "description": "List of category budget information for the month"
+            },
+        },
+        "required": ["month"],
+    }
+    
+    # Common parameter descriptions
+    common_params = {
+        "plan_id": {
+            "type": "string",
+            "description": "The plan ID (can be a UUID, 'last-used', or 'default')",
+            "examples": ["d95502e5-1217-4a6c-935b-c053888b3497", "last-used"]
+        },
+        "last_knowledge_of_server": {
+            "type": "integer",
+            "description": "Starting server knowledge timestamp for delta/incremental updates. Used to fetch only changes since this timestamp.",
+            "minimum": 0,
+            "examples": [0]
+        },
+        "since_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Filter transactions on or after this date (YYYY-MM-DD format)",
+            "examples": ["2024-01-01"]
+        },
+        "until_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Filter transactions on or before this date (YYYY-MM-DD format)",
+            "examples": ["2024-12-31"]
+        },
+    }
+    
     tools = [
         # User tools
         {
@@ -400,6 +641,27 @@ async def _handle_tools_list(
             "inputSchema": {
                 "type": "object",
                 "properties": {},
+                "description": "No parameters required",
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "user": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {"type": "string", "description": "Unique user identifier"},
+                                    "email": {"type": "string", "description": "User's email address"},
+                                },
+                                "required": ["id"],
+                            }
+                        },
+                        "required": ["user"],
+                    }
+                },
+                "required": ["data"],
             },
         },
         # Plans tools
@@ -411,10 +673,27 @@ async def _handle_tools_list(
                 "properties": {
                     "include_accounts": {
                         "type": "boolean",
-                        "description": "Whether to include plan accounts",
+                        "description": "Whether to include the list of plan accounts in the response",
                         "default": False,
                     },
                 },
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "plans": {
+                                "type": "array",
+                                "items": plan_schema,
+                                "description": "List of all accessible plans"
+                            }
+                        },
+                        "required": ["plans"],
+                    }
+                },
+                "required": ["data"],
             },
         },
         {
@@ -423,16 +702,34 @@ async def _handle_tools_list(
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "plan_id": {
-                        "type": "string",
-                        "description": "The plan ID (can be 'last-used' or 'default')",
-                    },
-                    "last_knowledge_of_server": {
-                        "type": "integer",
-                        "description": "Starting server knowledge for delta request",
-                    },
+                    "plan_id": common_params["plan_id"],
+                    "last_knowledge_of_server": common_params["last_knowledge_of_server"],
                 },
                 "required": ["plan_id"],
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "plan": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {"type": "string", "description": "Plan identifier"},
+                                    "name": {"type": "string", "description": "Plan name"},
+                                    "accounts": {"type": "array", "items": account_schema},
+                                    "categories": {"type": "array", "items": category_group_schema},
+                                    "payees": {"type": "array", "items": payee_schema},
+                                    "months": {"type": "array", "items": {"type": "object"}},
+                                },
+                                "required": ["id", "name", "accounts", "categories", "payees", "months"],
+                            }
+                        },
+                        "required": ["plan"],
+                    }
+                },
+                "required": ["data"],
             },
         },
         {
@@ -441,12 +738,32 @@ async def _handle_tools_list(
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "plan_id": {
-                        "type": "string",
-                        "description": "The plan ID (can be 'last-used' or 'default')",
-                    },
+                    "plan_id": common_params["plan_id"],
                 },
                 "required": ["plan_id"],
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "settings": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {"type": "string", "description": "Settings identifier"},
+                                    "name": {"type": "string", "description": "Plan name"},
+                                    "currency": {"type": "string", "description": "Currency code (e.g., USD, NOK)"},
+                                    "first_month": {"type": "string", "description": "First month in YYYY-MM-DD format"},
+                                    "last_month": {"type": "string", "description": "Last month in YYYY-MM-DD format"},
+                                },
+                                "required": ["id", "name"],
+                            }
+                        },
+                        "required": ["settings"],
+                    }
+                },
+                "required": ["data"],
             },
         },
         # Accounts tools
@@ -456,10 +773,27 @@ async def _handle_tools_list(
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "plan_id": {"type": "string", "description": "The plan ID"},
-                    "last_knowledge_of_server": {"type": "integer"},
+                    "plan_id": common_params["plan_id"],
+                    "last_knowledge_of_server": common_params["last_knowledge_of_server"],
                 },
                 "required": ["plan_id"],
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "accounts": {
+                                "type": "array",
+                                "items": account_schema,
+                                "description": "List of all accounts for the plan"
+                            }
+                        },
+                        "required": ["accounts"],
+                    }
+                },
+                "required": ["data"],
             },
         },
         {
@@ -468,10 +802,27 @@ async def _handle_tools_list(
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "plan_id": {"type": "string", "description": "The plan ID"},
-                    "account_id": {"type": "string", "description": "The account ID (UUID)"},
+                    "plan_id": common_params["plan_id"],
+                    "account_id": {
+                        "type": "string",
+                        "description": "The account ID (UUID)",
+                        "examples": ["a1b2c3d4-e5f6-7890-abcd-ef1234567890"]
+                    },
                 },
                 "required": ["plan_id", "account_id"],
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "account": account_schema,
+                        },
+                        "required": ["account"],
+                    }
+                },
+                "required": ["data"],
             },
         },
         {
@@ -480,14 +831,26 @@ async def _handle_tools_list(
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "plan_id": {"type": "string", "description": "The plan ID"},
+                    "plan_id": common_params["plan_id"],
                     "account": {
-                        "type": "object",
-                        "description": "Account data with name, type, and balance (milliunits)",
-                        "required": ["name", "type", "balance"],
+                        "allOf": [account_schema],
+                        "description": "Account data with name, type, and balance (in milliunits). Required: name, type, balance.",
                     },
                 },
                 "required": ["plan_id", "account"],
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "account": account_schema,
+                        },
+                        "required": ["account"],
+                    }
+                },
+                "required": ["data"],
             },
         },
         # Categories tools
@@ -497,10 +860,27 @@ async def _handle_tools_list(
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "plan_id": {"type": "string", "description": "The plan ID"},
-                    "last_knowledge_of_server": {"type": "integer"},
+                    "plan_id": common_params["plan_id"],
+                    "last_knowledge_of_server": common_params["last_knowledge_of_server"],
                 },
                 "required": ["plan_id"],
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "category_groups": {
+                                "type": "array",
+                                "items": category_group_schema,
+                                "description": "List of category groups with their categories"
+                            }
+                        },
+                        "required": ["category_groups"],
+                    }
+                },
+                "required": ["data"],
             },
         },
         {
@@ -509,10 +889,27 @@ async def _handle_tools_list(
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "plan_id": {"type": "string", "description": "The plan ID"},
-                    "category_id": {"type": "string", "description": "The category ID"},
+                    "plan_id": common_params["plan_id"],
+                    "category_id": {
+                        "type": "string",
+                        "description": "The category ID (UUID)",
+                        "examples": ["a1b2c3d4-e5f6-7890-abcd-ef1234567890"]
+                    },
                 },
                 "required": ["plan_id", "category_id"],
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "category": category_schema,
+                        },
+                        "required": ["category"],
+                    }
+                },
+                "required": ["data"],
             },
         },
         {
@@ -521,14 +918,27 @@ async def _handle_tools_list(
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "plan_id": {"type": "string", "description": "The plan ID"},
+                    "plan_id": common_params["plan_id"],
                     "category": {
-                        "type": "object",
-                        "description": "Category data including name and category_group_id",
+                        "allOf": [category_schema],
+                        "description": "Category data including name and category_group_id. Required: name, category_group_id.",
                         "required": ["name", "category_group_id"],
                     },
                 },
                 "required": ["plan_id", "category"],
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "category": category_schema,
+                        },
+                        "required": ["category"],
+                    }
+                },
+                "required": ["data"],
             },
         },
         {
@@ -537,11 +947,32 @@ async def _handle_tools_list(
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "plan_id": {"type": "string", "description": "The plan ID"},
-                    "category_id": {"type": "string", "description": "The category ID"},
-                    "category": {"type": "object", "description": "Category data to update"},
+                    "plan_id": common_params["plan_id"],
+                    "category_id": {
+                        "type": "string",
+                        "description": "The category ID (UUID)",
+                        "examples": ["a1b2c3d4-e5f6-7890-abcd-ef1234567890"]
+                    },
+                    "category": {
+                        "allOf": [category_schema],
+                        "description": "Category data to update. Required: name.",
+                        "required": ["name"],
+                    },
                 },
                 "required": ["plan_id", "category_id", "category"],
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "category": category_schema,
+                        },
+                        "required": ["category"],
+                    }
+                },
+                "required": ["data"],
             },
         },
         # Payees tools
@@ -551,10 +982,27 @@ async def _handle_tools_list(
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "plan_id": {"type": "string", "description": "The plan ID"},
-                    "last_knowledge_of_server": {"type": "integer"},
+                    "plan_id": common_params["plan_id"],
+                    "last_knowledge_of_server": common_params["last_knowledge_of_server"],
                 },
                 "required": ["plan_id"],
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "payees": {
+                                "type": "array",
+                                "items": payee_schema,
+                                "description": "List of all payees for the plan"
+                            }
+                        },
+                        "required": ["payees"],
+                    }
+                },
+                "required": ["data"],
             },
         },
         {
@@ -563,10 +1011,27 @@ async def _handle_tools_list(
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "plan_id": {"type": "string", "description": "The plan ID"},
-                    "payee_id": {"type": "string", "description": "The payee ID"},
+                    "plan_id": common_params["plan_id"],
+                    "payee_id": {
+                        "type": "string",
+                        "description": "The payee ID (UUID)",
+                        "examples": ["a1b2c3d4-e5f6-7890-abcd-ef1234567890"]
+                    },
                 },
                 "required": ["plan_id", "payee_id"],
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "payee": payee_schema,
+                        },
+                        "required": ["payee"],
+                    }
+                },
+                "required": ["data"],
             },
         },
         {
@@ -575,10 +1040,27 @@ async def _handle_tools_list(
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "plan_id": {"type": "string", "description": "The plan ID"},
-                    "payee": {"type": "object", "description": "Payee data with name"},
+                    "plan_id": common_params["plan_id"],
+                    "payee": {
+                        "allOf": [payee_schema],
+                        "description": "Payee data with name. Required: name.",
+                        "required": ["name"],
+                    },
                 },
                 "required": ["plan_id", "payee"],
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "payee": payee_schema,
+                        },
+                        "required": ["payee"],
+                    }
+                },
+                "required": ["data"],
             },
         },
         # Months tools
@@ -588,10 +1070,27 @@ async def _handle_tools_list(
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "plan_id": {"type": "string", "description": "The plan ID"},
-                    "last_knowledge_of_server": {"type": "integer"},
+                    "plan_id": common_params["plan_id"],
+                    "last_knowledge_of_server": common_params["last_knowledge_of_server"],
                 },
                 "required": ["plan_id"],
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "months": {
+                                "type": "array",
+                                "items": month_schema,
+                                "description": "List of all months for the plan"
+                            }
+                        },
+                        "required": ["months"],
+                    }
+                },
+                "required": ["data"],
             },
         },
         {
@@ -600,35 +1099,67 @@ async def _handle_tools_list(
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "plan_id": {"type": "string", "description": "The plan ID"},
+                    "plan_id": common_params["plan_id"],
                     "month": {
                         "type": "string",
-                        "description": "Month in ISO format (YYYY-MM-DD) or 'current'",
+                        "format": "date",
+                        "description": "Month in YYYY-MM-DD format or 'current'",
+                        "examples": ["2024-01-01", "current"]
                     },
                 },
                 "required": ["plan_id", "month"],
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "month": month_schema,
+                        },
+                        "required": ["month"],
+                    }
+                },
+                "required": ["data"],
             },
         },
         # Transactions tools
         {
             "name": "get_transactions",
-            "description": "Get transactions for a plan",
+            "description": "Get transactions for a plan. All amounts are in milliunits (1/1000 of currency unit).",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "plan_id": {"type": "string", "description": "The plan ID"},
-                    "since_date": {"type": "string", "description": "Transactions on or after this date (YYYY-MM-DD)"},
-                    "until_date": {"type": "string", "description": "Transactions on or before this date (YYYY-MM-DD)"},
+                    "plan_id": common_params["plan_id"],
+                    "since_date": common_params["since_date"],
+                    "until_date": common_params["until_date"],
                     "type": {
                         "type": "string",
                         "enum": ["uncategorized", "unapproved"],
-                        "description": "Filter by transaction type",
+                        "description": "Filter by transaction type: 'uncategorized' for transactions without a category, 'unapproved' for transactions not yet approved",
                     },
-                    "last_knowledge_of_server": {"type": "integer"},
+                    "last_knowledge_of_server": common_params["last_knowledge_of_server"],
                     "limit": {"type": "integer", "description": "Maximum number of transactions to return (client-side pagination)", "minimum": 1},
                     "offset": {"type": "integer", "description": "Number of transactions to skip (client-side pagination)", "minimum": 0, "default": 0},
                 },
                 "required": ["plan_id"],
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "transactions": {
+                                "type": "array",
+                                "items": transaction_schema,
+                                "description": "List of transactions matching the filter criteria"
+                            }
+                        },
+                        "required": ["transactions"],
+                    }
+                },
+                "required": ["data"],
             },
         },
         {
@@ -637,95 +1168,197 @@ async def _handle_tools_list(
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "plan_id": {"type": "string", "description": "The plan ID"},
-                    "transaction_id": {"type": "string", "description": "The transaction ID"},
+                    "plan_id": common_params["plan_id"],
+                    "transaction_id": {
+                        "type": "string",
+                        "description": "The transaction ID (UUID)",
+                        "examples": ["a1b2c3d4-e5f6-7890-abcd-ef1234567890"]
+                    },
                 },
                 "required": ["plan_id", "transaction_id"],
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "transaction": transaction_schema,
+                        },
+                        "required": ["transaction"],
+                    }
+                },
+                "required": ["data"],
             },
         },
         {
             "name": "create_transaction",
-            "description": "Create a new transaction",
+            "description": "Create a new transaction. Amount must be in milliunits (1/1000 of currency unit).",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "plan_id": {"type": "string", "description": "The plan ID"},
+                    "plan_id": common_params["plan_id"],
                     "transaction": {
-                        "type": "object",
-                        "description": "Single transaction data",
-                    },
-                    "transactions": {
-                        "type": "array",
-                        "description": "Multiple transactions data",
-                        "items": {"type": "object"},
+                        "allOf": [transaction_schema],
+                        "description": "Single transaction data. Required: date, amount, account_id. Amount in milliunits.",
+                        "required": ["date", "amount", "account_id"],
                     },
                 },
-                "required": ["plan_id"],
+                "required": ["plan_id", "transaction"],
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "transaction": transaction_schema,
+                        },
+                        "required": ["transaction"],
+                    }
+                },
+                "required": ["data"],
             },
         },
         {
             "name": "update_transaction",
-            "description": "Update a single transaction",
+            "description": "Update a single transaction. Amount must be in milliunits.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "plan_id": {"type": "string", "description": "The plan ID"},
-                    "transaction_id": {"type": "string", "description": "The transaction ID"},
-                    "transaction": {"type": "object", "description": "Transaction data to update"},
+                    "plan_id": common_params["plan_id"],
+                    "transaction_id": {
+                        "type": "string",
+                        "description": "The transaction ID (UUID)",
+                        "examples": ["a1b2c3d4-e5f6-7890-abcd-ef1234567890"]
+                    },
+                    "transaction": {
+                        "allOf": [transaction_schema],
+                        "description": "Transaction data to update. Amount in milliunits.",
+                    },
                 },
                 "required": ["plan_id", "transaction_id", "transaction"],
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "transaction": transaction_schema,
+                        },
+                        "required": ["transaction"],
+                    }
+                },
+                "required": ["data"],
             },
         },
         {
             "name": "update_transactions",
-            "description": "Update multiple transactions",
+            "description": "Update multiple transactions at once. Each transaction must have an id or import_id.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "plan_id": {"type": "string", "description": "The plan ID"},
+                    "plan_id": common_params["plan_id"],
                     "transactions": {
                         "type": "array",
-                        "description": "List of transactions to update (each with id or import_id)",
-                        "items": {"type": "object"},
+                        "description": "List of transactions to update. Each must have id or import_id.",
+                        "items": transaction_schema,
+                        "minItems": 1,
                     },
                 },
                 "required": ["plan_id", "transactions"],
             },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "transactions": {
+                                "type": "array",
+                                "items": transaction_schema,
+                                "description": "List of updated transactions"
+                            }
+                        },
+                        "required": ["transactions"],
+                    }
+                },
+                "required": ["data"],
+            },
         },
         {
             "name": "delete_transaction",
-            "description": "Delete a transaction",
+            "description": "Delete a transaction by ID",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "plan_id": {"type": "string", "description": "The plan ID"},
-                    "transaction_id": {"type": "string", "description": "The transaction ID"},
+                    "plan_id": common_params["plan_id"],
+                    "transaction_id": {
+                        "type": "string",
+                        "description": "The transaction ID (UUID)",
+                        "examples": ["a1b2c3d4-e5f6-7890-abcd-ef1234567890"]
+                    },
                 },
                 "required": ["plan_id", "transaction_id"],
             },
         },
         {
             "name": "import_transactions",
-            "description": "Import transactions from linked accounts",
+            "description": "Import transactions from linked accounts. Returns transactions in milliunits.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "plan_id": {"type": "string", "description": "The plan ID"},
+                    "plan_id": common_params["plan_id"],
                 },
                 "required": ["plan_id"],
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "transactions": {
+                                "type": "array",
+                                "items": transaction_schema,
+                                "description": "List of imported transactions in milliunits"
+                            }
+                        },
+                        "required": ["transactions"],
+                    }
+                },
+                "required": ["data"],
             },
         },
         # Scheduled Transactions tools
         {
             "name": "get_scheduled_transactions",
-            "description": "Get all scheduled transactions for a plan",
+            "description": "Get all scheduled transactions for a plan. Amounts are in milliunits.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "plan_id": {"type": "string", "description": "The plan ID"},
-                    "last_knowledge_of_server": {"type": "integer"},
+                    "plan_id": common_params["plan_id"],
+                    "last_knowledge_of_server": common_params["last_knowledge_of_server"],
                 },
                 "required": ["plan_id"],
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "scheduled_transactions": {
+                                "type": "array",
+                                "items": scheduled_transaction_schema,
+                                "description": "List of all scheduled transactions for the plan"
+                            }
+                        },
+                        "required": ["scheduled_transactions"],
+                    }
+                },
+                "required": ["data"],
             },
         },
         {
@@ -734,45 +1367,103 @@ async def _handle_tools_list(
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "plan_id": {"type": "string", "description": "The plan ID"},
-                    "scheduled_transaction_id": {"type": "string", "description": "The scheduled transaction ID"},
+                    "plan_id": common_params["plan_id"],
+                    "scheduled_transaction_id": {
+                        "type": "string",
+                        "description": "The scheduled transaction ID (UUID)",
+                        "examples": ["a1b2c3d4-e5f6-7890-abcd-ef1234567890"]
+                    },
                 },
                 "required": ["plan_id", "scheduled_transaction_id"],
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "scheduled_transaction": scheduled_transaction_schema,
+                        },
+                        "required": ["scheduled_transaction"],
+                    }
+                },
+                "required": ["data"],
             },
         },
         {
             "name": "create_scheduled_transaction",
-            "description": "Create a new scheduled transaction",
+            "description": "Create a new scheduled transaction. Amount must be in milliunits.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "plan_id": {"type": "string", "description": "The plan ID"},
-                    "scheduled_transaction": {"type": "object", "description": "Scheduled transaction data"},
+                    "plan_id": common_params["plan_id"],
+                    "scheduled_transaction": {
+                        "allOf": [scheduled_transaction_schema],
+                        "description": "Scheduled transaction data. Required: date_first, frequency, amount (in milliunits).",
+                        "required": ["date_first", "frequency", "amount"],
+                    },
                 },
                 "required": ["plan_id", "scheduled_transaction"],
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "scheduled_transaction": scheduled_transaction_schema,
+                        },
+                        "required": ["scheduled_transaction"],
+                    }
+                },
+                "required": ["data"],
             },
         },
         {
             "name": "update_scheduled_transaction",
-            "description": "Update a scheduled transaction",
+            "description": "Update a scheduled transaction. Amount must be in milliunits.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "plan_id": {"type": "string", "description": "The plan ID"},
-                    "scheduled_transaction_id": {"type": "string", "description": "The scheduled transaction ID"},
-                    "scheduled_transaction": {"type": "object", "description": "Scheduled transaction data to update"},
+                    "plan_id": common_params["plan_id"],
+                    "scheduled_transaction_id": {
+                        "type": "string",
+                        "description": "The scheduled transaction ID (UUID)",
+                        "examples": ["a1b2c3d4-e5f6-7890-abcd-ef1234567890"]
+                    },
+                    "scheduled_transaction": {
+                        "allOf": [scheduled_transaction_schema],
+                        "description": "Scheduled transaction data to update. Amount in milliunits.",
+                    },
                 },
                 "required": ["plan_id", "scheduled_transaction_id", "scheduled_transaction"],
+            },
+            "outputSchema": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "scheduled_transaction": scheduled_transaction_schema,
+                        },
+                        "required": ["scheduled_transaction"],
+                    }
+                },
+                "required": ["data"],
             },
         },
         {
             "name": "delete_scheduled_transaction",
-            "description": "Delete a scheduled transaction",
+            "description": "Delete a scheduled transaction by ID",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "plan_id": {"type": "string", "description": "The plan ID"},
-                    "scheduled_transaction_id": {"type": "string", "description": "The scheduled transaction ID"},
+                    "plan_id": common_params["plan_id"],
+                    "scheduled_transaction_id": {
+                        "type": "string",
+                        "description": "The scheduled transaction ID (UUID)",
+                        "examples": ["a1b2c3d4-e5f6-7890-abcd-ef1234567890"]
+                    },
                 },
                 "required": ["plan_id", "scheduled_transaction_id"],
             },
