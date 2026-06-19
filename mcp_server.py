@@ -86,6 +86,36 @@ app = FastAPI(
 # MCP Standard Endpoints
 
 
+@app.post("/mcp")
+async def mcp_root() -> dict[str, Any]:
+    """Root MCP endpoint for protocol compatibility."""
+    return {
+        "name": settings.mcp_name,
+        "version": settings.mcp_version,
+        "description": "YNAB MCP Connector - Interact with You Need A Budget API",
+        "capabilities": {
+            "budgets": {"read": True},
+            "categories": {"read": True},
+            "accounts": {"read": True},
+            "transactions": {"read": True, "write": True},
+        },
+        "endpoints": {
+            "health": "/mcp/health",
+            "info": "/mcp/info",
+            "resources": {
+                "budgets": "/mcp/resources/budgets",
+                "accounts": "/mcp/resources/budgets/{budget_id}/accounts",
+                "categories": "/mcp/resources/budgets/{budget_id}/categories",
+            },
+            "tools": {
+                "get_budget": "/mcp/tools/get_budget",
+                "get_transactions": "/mcp/tools/get_transactions",
+                "create_transaction": "/mcp/tools/create_transaction",
+            },
+        },
+    }
+
+
 @app.get("/mcp/health")
 async def health_check() -> dict[str, str]:
     """Health check endpoint for MCP."""
