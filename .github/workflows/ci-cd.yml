@@ -54,6 +54,13 @@ jobs:
           username: ohjohnsen
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Extract version from pyproject.toml
+        id: version
+        run: |
+          VERSION=$(grep -E "^version\s*=" pyproject.toml | cut -d'"' -f2)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Detected version: $VERSION"
+
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@v5
@@ -62,8 +69,8 @@ jobs:
           tags: |
             type=ref,event=branch
             type=ref,event=tag
-            type=sha
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ steps.version.outputs.version }}
 
       - name: Build Docker image
         uses: docker/build-push-action@v5
