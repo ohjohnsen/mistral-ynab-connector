@@ -7,7 +7,9 @@ All endpoints use the official YNAB API v1.85.0 terminology (/plans/ not /budget
 """
 
 from contextlib import asynccontextmanager
+from datetime import datetime
 import json
+import re
 from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
@@ -18,6 +20,65 @@ from ynab_client import YNABClient
 
 # Global YNAB client instance
 _ynab_client: YNABClient | None = None
+
+
+# ============================================================================
+# Validation Helpers
+# ============================================================================
+
+def _validate_date_format(date_str: str | None, param_name: str) -> str | None:
+    """Validate that a date string is in YYYY-MM-DD format.
+    
+    Args:
+        date_str: The date string to validate
+        param_name: Name of the parameter for error messages
+        
+    Returns:
+        The validated date string, or None if not provided
+        
+    Raises:
+        ValueError: If the date format is invalid
+    """
+    if date_str is None:
+        return None
+    
+    if not isinstance(date_str, str):
+        raise ValueError(f"{param_name} must be a string in YYYY-MM-DD format, got {type(date_str).__name__}")
+    
+    # YNAB expects YYYY-MM-DD format
+    if not re.match(r'^\d{4}-\d{2}-\d{2}$', date_str):
+        raise ValueError(f"{param_name} must be in YYYY-MM-DD format, got: {date_str}")
+    
+    # Optional: Validate it's a real date
+    try:
+        datetime.strptime(date_str, "%Y-%m-%d")
+    except ValueError:
+        raise ValueError(f"{param_name} is not a valid date: {date_str}")
+    
+    return date_str
+
+
+def _validate_required_param(param: Any, param_name: str, expected_type: type | tuple = str) -> Any:
+    """Validate that a required parameter is provided and of the correct type.
+    
+    Args:
+        param: The parameter value
+        param_name: Name of the parameter for error messages
+        expected_type: Expected type(s) of the parameter
+        
+    Returns:
+        The validated parameter value
+        
+    Raises:
+        ValueError: If the parameter is missing or of wrong type
+    """
+    if param is None:
+        raise ValueError(f"{param_name} is required")
+    
+    if not isinstance(param, expected_type):
+        raise ValueError(f"{param_name} must be of type {expected_type.__name__ if isinstance(expected_type, type) else expected_type}, got {type(param).__name__}")
+    
+    return param
 
 
 def get_ynab_api_key(
@@ -564,6 +625,8 @@ async def _handle_tools_list(
                         "description": "Filter by transaction type",
                     },
                     "last_knowledge_of_server": {"type": "integer"},
+                    "limit": {"type": "integer", "description": "Maximum number of transactions to return (client-side pagination)", "minimum": 1},
+                    "offset": {"type": "integer", "description": "Number of transactions to skip (client-side pagination)", "minimum": 0, "default": 0},
                 },
                 "required": ["plan_id"],
             },
@@ -867,18 +930,61 @@ async def _handle_tools_call(
             plan_id = arguments.get("plan_id")
             if not plan_id:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id is required"}, "id": request_id}
-            since_date = arguments.get("since_date")
-            until_date = arguments.get("until_date")
-            type_filter = arguments.get("type")
-            last_knowledge = arguments.get("last_knowledge_of_server")
-            data = await client.get_transactions(
-                plan_id,
-                since_date=since_date,
-                until_date=until_date,
-                type_filter=type_filter,
-                last_knowledge_of_server=last_knowledge,
-            )
-            content = [{"type": "text", "text": json.dumps(data)}]
+            
+            try:
+                # Validate required parameters
+                _validate_required_param(plan_id, "plan_id", str)
+                
+                # Validate date formats
+                since_date = _validate_date_format(arguments.get("since_date"), "since_date")
+                until_date = _validate_date_format(arguments.get("until_date"), "until_date")
+                
+                type_filter = arguments.get("type")
+                last_knowledge = arguments.get("last_knowledge_of_server")
+                
+                # Pagination parameters (client-side, default to no limit)
+                limit = arguments.get("limit")
+                offset = arguments.get("offset", 0)
+                
+                if limit is not None:
+                    try:
+                        limit = int(limit)
+                        if limit <= 0:
+                            raise ValueError("limit must be a positive integer")
+                    except (ValueError, TypeError):
+                        raise ValueError("limit must be a positive integer")
+                
+                if offset is not None:
+                    try:
+                        offset = int(offset)
+                        if offset < 0:
+                            raise ValueError("offset must be a non-negative integer")
+                    except (ValueError, TypeError):
+                        raise ValueError("offset must be a non-negative integer")
+                
+                data = await client.get_transactions(
+                    plan_id,
+                    since_date=since_date,
+                    until_date=until_date,
+                    type_filter=type_filter,
+                    last_knowledge_of_server=last_knowledge,
+                )
+                
+                # Apply client-side pagination if limit is specified
+                if limit is not None and "data" in data and "transactions" in data["data"]:
+                    transactions = data["data"]["transactions"]
+                    paginated = transactions[offset:offset + limit]
+                    data["data"]["transactions"] = paginated
+                    # Add pagination metadata
+                    data["data"]["pagination"] = {
+                        "limit": limit,
+                        "offset": offset,
+                        "total": len(transactions)
+                    }
+                
+                content = [{"type": "text", "text": json.dumps(data)}]
+            except ValueError as e:
+                return {"jsonrpc": "2.0", "error": {"code": -32602, "message": str(e)}, "id": request_id}
         
         elif name == "get_transaction":
             plan_id = arguments.get("plan_id")
