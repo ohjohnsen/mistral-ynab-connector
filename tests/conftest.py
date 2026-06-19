@@ -118,6 +118,20 @@ def mock_ynab_client(monkeypatch):
         }
     }
     
+    # Mock get_account for individual account
+    mock_client.get_account.return_value = {
+        "data": {
+            "account": {
+                "id": "test-account-id-001",
+                "name": "Checking Account",
+                "type": "CHECKING",
+                "balance": 100000,
+                "cleared_balance": 90000,
+                "uncleared_balance": 10000
+            }
+        }
+    }
+    
     # Make async methods return AsyncMock for compatibility
     mock_client._make_request = AsyncMock()
     
