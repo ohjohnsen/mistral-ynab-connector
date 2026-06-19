@@ -14,7 +14,7 @@ def main() -> None:
         port=settings.server_port,
         log_level="info",
         reload=True,
-        reload_exclude=["tests/*"],
+        reload_excludes=["tests/*"],
     )
 
 

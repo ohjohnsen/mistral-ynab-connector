@@ -644,27 +644,7 @@ async def _handle_tools_list(
                 "type": "object",
                 "properties": {},
                 "description": "No parameters required",
-            },
-            "outputSchema": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "object",
-                        "properties": {
-                            "user": {
-                                "type": "object",
-                                "properties": {
-                                    "id": {"type": "string", "description": "Unique user identifier"},
-                                    "email": {"type": "string", "description": "User's email address"},
-                                },
-                                "required": ["id"],
-                            }
-                        },
-                        "required": ["user"],
-                    }
-                },
-                "required": ["data"],
-            },
+            }
         },
         # Plans tools
         {
@@ -679,24 +659,7 @@ async def _handle_tools_list(
                         "default": False,
                     },
                 },
-            },
-            "outputSchema": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "object",
-                        "properties": {
-                            "plans": {
-                                "type": "array",
-                                "items": plan_schema,
-                                "description": "List of all accessible plans"
-                            }
-                        },
-                        "required": ["plans"],
-                    }
-                },
-                "required": ["data"],
-            },
+            }
         },
         {
             "name": "get_plan",
@@ -708,31 +671,7 @@ async def _handle_tools_list(
                     "last_knowledge_of_server": common_params["last_knowledge_of_server"],
                 },
                 "required": ["plan_id"],
-            },
-            "outputSchema": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "object",
-                        "properties": {
-                            "plan": {
-                                "type": "object",
-                                "properties": {
-                                    "id": {"type": "string", "description": "Plan identifier"},
-                                    "name": {"type": "string", "description": "Plan name"},
-                                    "accounts": {"type": "array", "items": account_schema},
-                                    "categories": {"type": "array", "items": category_group_schema},
-                                    "payees": {"type": "array", "items": payee_schema},
-                                    "months": {"type": "array", "items": {"type": "object"}},
-                                },
-                                "required": ["id", "name", "accounts", "categories", "payees", "months"],
-                            }
-                        },
-                        "required": ["plan"],
-                    }
-                },
-                "required": ["data"],
-            },
+            }
         },
         {
             "name": "get_plan_settings",
@@ -743,30 +682,7 @@ async def _handle_tools_list(
                     "plan_id": common_params["plan_id"],
                 },
                 "required": ["plan_id"],
-            },
-            "outputSchema": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "object",
-                        "properties": {
-                            "settings": {
-                                "type": "object",
-                                "properties": {
-                                    "id": {"type": "string", "description": "Settings identifier"},
-                                    "name": {"type": "string", "description": "Plan name"},
-                                    "currency": {"type": "string", "description": "Currency code (e.g., USD, NOK)"},
-                                    "first_month": {"type": "string", "description": "First month in YYYY-MM-DD format"},
-                                    "last_month": {"type": "string", "description": "Last month in YYYY-MM-DD format"},
-                                },
-                                "required": ["id", "name"],
-                            }
-                        },
-                        "required": ["settings"],
-                    }
-                },
-                "required": ["data"],
-            },
+            }
         },
         # Accounts tools
         {
@@ -779,24 +695,7 @@ async def _handle_tools_list(
                     "last_knowledge_of_server": common_params["last_knowledge_of_server"],
                 },
                 "required": ["plan_id"],
-            },
-            "outputSchema": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "object",
-                        "properties": {
-                            "accounts": {
-                                "type": "array",
-                                "items": account_schema,
-                                "description": "List of all accounts for the plan"
-                            }
-                        },
-                        "required": ["accounts"],
-                    }
-                },
-                "required": ["data"],
-            },
+            }
         },
         {
             "name": "get_account",
@@ -812,20 +711,7 @@ async def _handle_tools_list(
                     },
                 },
                 "required": ["plan_id", "account_id"],
-            },
-            "outputSchema": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "object",
-                        "properties": {
-                            "account": account_schema,
-                        },
-                        "required": ["account"],
-                    }
-                },
-                "required": ["data"],
-            },
+            }
         },
         {
             "name": "create_account",
@@ -840,20 +726,7 @@ async def _handle_tools_list(
                     },
                 },
                 "required": ["plan_id", "account"],
-            },
-            "outputSchema": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "object",
-                        "properties": {
-                            "account": account_schema,
-                        },
-                        "required": ["account"],
-                    }
-                },
-                "required": ["data"],
-            },
+            }
         },
         # Categories tools
         {
@@ -866,24 +739,7 @@ async def _handle_tools_list(
                     "last_knowledge_of_server": common_params["last_knowledge_of_server"],
                 },
                 "required": ["plan_id"],
-            },
-            "outputSchema": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "object",
-                        "properties": {
-                            "category_groups": {
-                                "type": "array",
-                                "items": category_group_schema,
-                                "description": "List of category groups with their categories"
-                            }
-                        },
-                        "required": ["category_groups"],
-                    }
-                },
-                "required": ["data"],
-            },
+            }
         },
         {
             "name": "get_category",
@@ -899,20 +755,7 @@ async def _handle_tools_list(
                     },
                 },
                 "required": ["plan_id", "category_id"],
-            },
-            "outputSchema": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "object",
-                        "properties": {
-                            "category": category_schema,
-                        },
-                        "required": ["category"],
-                    }
-                },
-                "required": ["data"],
-            },
+            }
         },
         {
             "name": "create_category",
@@ -928,20 +771,7 @@ async def _handle_tools_list(
                     },
                 },
                 "required": ["plan_id", "category"],
-            },
-            "outputSchema": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "object",
-                        "properties": {
-                            "category": category_schema,
-                        },
-                        "required": ["category"],
-                    }
-                },
-                "required": ["data"],
-            },
+            }
         },
         {
             "name": "update_category",
@@ -962,20 +792,7 @@ async def _handle_tools_list(
                     },
                 },
                 "required": ["plan_id", "category_id", "category"],
-            },
-            "outputSchema": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "object",
-                        "properties": {
-                            "category": category_schema,
-                        },
-                        "required": ["category"],
-                    }
-                },
-                "required": ["data"],
-            },
+            }
         },
         # Payees tools
         {
@@ -988,24 +805,7 @@ async def _handle_tools_list(
                     "last_knowledge_of_server": common_params["last_knowledge_of_server"],
                 },
                 "required": ["plan_id"],
-            },
-            "outputSchema": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "object",
-                        "properties": {
-                            "payees": {
-                                "type": "array",
-                                "items": payee_schema,
-                                "description": "List of all payees for the plan"
-                            }
-                        },
-                        "required": ["payees"],
-                    }
-                },
-                "required": ["data"],
-            },
+            }
         },
         {
             "name": "get_payee",
@@ -1021,20 +821,7 @@ async def _handle_tools_list(
                     },
                 },
                 "required": ["plan_id", "payee_id"],
-            },
-            "outputSchema": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "object",
-                        "properties": {
-                            "payee": payee_schema,
-                        },
-                        "required": ["payee"],
-                    }
-                },
-                "required": ["data"],
-            },
+            }
         },
         {
             "name": "create_payee",
@@ -1050,20 +837,7 @@ async def _handle_tools_list(
                     },
                 },
                 "required": ["plan_id", "payee"],
-            },
-            "outputSchema": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "object",
-                        "properties": {
-                            "payee": payee_schema,
-                        },
-                        "required": ["payee"],
-                    }
-                },
-                "required": ["data"],
-            },
+            }
         },
         # Months tools
         {
@@ -1076,24 +850,7 @@ async def _handle_tools_list(
                     "last_knowledge_of_server": common_params["last_knowledge_of_server"],
                 },
                 "required": ["plan_id"],
-            },
-            "outputSchema": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "object",
-                        "properties": {
-                            "months": {
-                                "type": "array",
-                                "items": month_schema,
-                                "description": "List of all months for the plan"
-                            }
-                        },
-                        "required": ["months"],
-                    }
-                },
-                "required": ["data"],
-            },
+            }
         },
         {
             "name": "get_month",
@@ -1110,20 +867,7 @@ async def _handle_tools_list(
                     },
                 },
                 "required": ["plan_id", "month"],
-            },
-            "outputSchema": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "object",
-                        "properties": {
-                            "month": month_schema,
-                        },
-                        "required": ["month"],
-                    }
-                },
-                "required": ["data"],
-            },
+            }
         },
         # Transactions tools
         {
@@ -1145,24 +889,7 @@ async def _handle_tools_list(
                     "offset": {"type": "integer", "description": "Number of transactions to skip (client-side pagination)", "minimum": 0, "default": 0},
                 },
                 "required": ["plan_id"],
-            },
-            "outputSchema": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "object",
-                        "properties": {
-                            "transactions": {
-                                "type": "array",
-                                "items": transaction_schema,
-                                "description": "List of transactions matching the filter criteria"
-                            }
-                        },
-                        "required": ["transactions"],
-                    }
-                },
-                "required": ["data"],
-            },
+            }
         },
         {
             "name": "get_transaction",
@@ -1178,20 +905,7 @@ async def _handle_tools_list(
                     },
                 },
                 "required": ["plan_id", "transaction_id"],
-            },
-            "outputSchema": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "object",
-                        "properties": {
-                            "transaction": transaction_schema,
-                        },
-                        "required": ["transaction"],
-                    }
-                },
-                "required": ["data"],
-            },
+            }
         },
         {
             "name": "create_transaction",
@@ -1207,20 +921,7 @@ async def _handle_tools_list(
                     },
                 },
                 "required": ["plan_id", "transaction"],
-            },
-            "outputSchema": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "object",
-                        "properties": {
-                            "transaction": transaction_schema,
-                        },
-                        "required": ["transaction"],
-                    }
-                },
-                "required": ["data"],
-            },
+            }
         },
         {
             "name": "update_transaction",
@@ -1240,20 +941,7 @@ async def _handle_tools_list(
                     },
                 },
                 "required": ["plan_id", "transaction_id", "transaction"],
-            },
-            "outputSchema": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "object",
-                        "properties": {
-                            "transaction": transaction_schema,
-                        },
-                        "required": ["transaction"],
-                    }
-                },
-                "required": ["data"],
-            },
+            }
         },
         {
             "name": "update_transactions",
@@ -1270,24 +958,7 @@ async def _handle_tools_list(
                     },
                 },
                 "required": ["plan_id", "transactions"],
-            },
-            "outputSchema": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "object",
-                        "properties": {
-                            "transactions": {
-                                "type": "array",
-                                "items": transaction_schema,
-                                "description": "List of updated transactions"
-                            }
-                        },
-                        "required": ["transactions"],
-                    }
-                },
-                "required": ["data"],
-            },
+            }
         },
         {
             "name": "delete_transaction",
@@ -1314,24 +985,7 @@ async def _handle_tools_list(
                     "plan_id": common_params["plan_id"],
                 },
                 "required": ["plan_id"],
-            },
-            "outputSchema": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "object",
-                        "properties": {
-                            "transactions": {
-                                "type": "array",
-                                "items": transaction_schema,
-                                "description": "List of imported transactions in milliunits"
-                            }
-                        },
-                        "required": ["transactions"],
-                    }
-                },
-                "required": ["data"],
-            },
+            }
         },
         # Scheduled Transactions tools
         {
@@ -1344,24 +998,7 @@ async def _handle_tools_list(
                     "last_knowledge_of_server": common_params["last_knowledge_of_server"],
                 },
                 "required": ["plan_id"],
-            },
-            "outputSchema": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "object",
-                        "properties": {
-                            "scheduled_transactions": {
-                                "type": "array",
-                                "items": scheduled_transaction_schema,
-                                "description": "List of all scheduled transactions for the plan"
-                            }
-                        },
-                        "required": ["scheduled_transactions"],
-                    }
-                },
-                "required": ["data"],
-            },
+            }
         },
         {
             "name": "get_scheduled_transaction",
@@ -1377,20 +1014,7 @@ async def _handle_tools_list(
                     },
                 },
                 "required": ["plan_id", "scheduled_transaction_id"],
-            },
-            "outputSchema": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "object",
-                        "properties": {
-                            "scheduled_transaction": scheduled_transaction_schema,
-                        },
-                        "required": ["scheduled_transaction"],
-                    }
-                },
-                "required": ["data"],
-            },
+            }
         },
         {
             "name": "create_scheduled_transaction",
@@ -1406,20 +1030,7 @@ async def _handle_tools_list(
                     },
                 },
                 "required": ["plan_id", "scheduled_transaction"],
-            },
-            "outputSchema": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "object",
-                        "properties": {
-                            "scheduled_transaction": scheduled_transaction_schema,
-                        },
-                        "required": ["scheduled_transaction"],
-                    }
-                },
-                "required": ["data"],
-            },
+            }
         },
         {
             "name": "update_scheduled_transaction",
@@ -1439,20 +1050,7 @@ async def _handle_tools_list(
                     },
                 },
                 "required": ["plan_id", "scheduled_transaction_id", "scheduled_transaction"],
-            },
-            "outputSchema": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "object",
-                        "properties": {
-                            "scheduled_transaction": scheduled_transaction_schema,
-                        },
-                        "required": ["scheduled_transaction"],
-                    }
-                },
-                "required": ["data"],
-            },
+            }
         },
         {
             "name": "delete_scheduled_transaction",
@@ -1494,13 +1092,13 @@ async def _handle_tools_call(
         # User tools
         if name == "get_user":
             data = await client.get_user()
-            content = [{ "type": "application/json", "text": json.dumps(data) }]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         # Plans tools
         elif name == "get_plans":
             include_accounts = arguments.get("include_accounts", False)
             data = await client.get_plans(include_accounts=include_accounts)
-            content = [{ "type": "application/json", "text": json.dumps(data) }]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "get_plan":
             plan_id = arguments.get("plan_id")
@@ -1508,14 +1106,14 @@ async def _handle_tools_call(
             if not plan_id:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id is required"}, "id": request_id}
             data = await client.get_plan(plan_id, last_knowledge_of_server=last_knowledge)
-            content = [{ "type": "application/json", "text": json.dumps(data) }]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "get_plan_settings":
             plan_id = arguments.get("plan_id")
             if not plan_id:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id is required"}, "id": request_id}
             data = await client.get_plan_settings(plan_id)
-            content = [{ "type": "application/json", "text": json.dumps(data) }]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         # Accounts tools
         elif name == "get_accounts":
@@ -1524,7 +1122,7 @@ async def _handle_tools_call(
             if not plan_id:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id is required"}, "id": request_id}
             data = await client.get_accounts(plan_id, last_knowledge_of_server=last_knowledge)
-            content = [{ "type": "application/json", "text": json.dumps(data) }]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "get_account":
             plan_id = arguments.get("plan_id")
@@ -1532,7 +1130,7 @@ async def _handle_tools_call(
             if not plan_id or not account_id:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id and account_id are required"}, "id": request_id}
             data = await client.get_account(plan_id, account_id)
-            content = [{ "type": "application/json", "text": json.dumps(data) }]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "create_account":
             plan_id = arguments.get("plan_id")
@@ -1540,7 +1138,7 @@ async def _handle_tools_call(
             if not plan_id or not account_data:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id and account are required"}, "id": request_id}
             data = await client.create_account(plan_id, account_data)
-            content = [{ "type": "application/json", "text": json.dumps(data) }]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         # Categories tools
         elif name == "get_categories":
@@ -1549,7 +1147,7 @@ async def _handle_tools_call(
             if not plan_id:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id is required"}, "id": request_id}
             data = await client.get_categories(plan_id, last_knowledge_of_server=last_knowledge)
-            content = [{ "type": "application/json", "text": json.dumps(data) }]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "get_category":
             plan_id = arguments.get("plan_id")
@@ -1557,7 +1155,7 @@ async def _handle_tools_call(
             if not plan_id or not category_id:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id and category_id are required"}, "id": request_id}
             data = await client.get_category(plan_id, category_id)
-            content = [{ "type": "application/json", "text": json.dumps(data) }]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "create_category":
             plan_id = arguments.get("plan_id")
@@ -1565,7 +1163,7 @@ async def _handle_tools_call(
             if not plan_id or not category_data:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id and category are required"}, "id": request_id}
             data = await client.create_category(plan_id, category_data)
-            content = [{ "type": "application/json", "text": json.dumps(data) }]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "update_category":
             plan_id = arguments.get("plan_id")
@@ -1574,7 +1172,7 @@ async def _handle_tools_call(
             if not plan_id or not category_id or not category_data:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id, category_id, and category are required"}, "id": request_id}
             data = await client.update_category(plan_id, category_id, category_data)
-            content = [{ "type": "application/json", "text": json.dumps(data) }]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         # Payees tools
         elif name == "get_payees":
@@ -1583,7 +1181,7 @@ async def _handle_tools_call(
             if not plan_id:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id is required"}, "id": request_id}
             data = await client.get_payees(plan_id, last_knowledge_of_server=last_knowledge)
-            content = [{ "type": "application/json", "text": json.dumps(data) }]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "get_payee":
             plan_id = arguments.get("plan_id")
@@ -1591,7 +1189,7 @@ async def _handle_tools_call(
             if not plan_id or not payee_id:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id and payee_id are required"}, "id": request_id}
             data = await client.get_payee(plan_id, payee_id)
-            content = [{ "type": "application/json", "text": json.dumps(data) }]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "create_payee":
             plan_id = arguments.get("plan_id")
@@ -1599,7 +1197,7 @@ async def _handle_tools_call(
             if not plan_id or not payee_data:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id and payee are required"}, "id": request_id}
             data = await client.create_payee(plan_id, payee_data)
-            content = [{ "type": "application/json", "text": json.dumps(data) }]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         # Months tools
         elif name == "get_months":
@@ -1608,7 +1206,7 @@ async def _handle_tools_call(
             if not plan_id:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id is required"}, "id": request_id}
             data = await client.get_months(plan_id, last_knowledge_of_server=last_knowledge)
-            content = [{ "type": "application/json", "text": json.dumps(data) }]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "get_month":
             plan_id = arguments.get("plan_id")
@@ -1616,7 +1214,7 @@ async def _handle_tools_call(
             if not plan_id or not month:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id and month are required"}, "id": request_id}
             data = await client.get_month(plan_id, month)
-            content = [{ "type": "application/json", "text": json.dumps(data) }]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         # Transactions tools
         elif name == "get_transactions":
@@ -1675,7 +1273,7 @@ async def _handle_tools_call(
                         "total": len(transactions)
                     }
                 
-                content = [{ "type": "application/json", "text": json.dumps(data) }]
+                content = [{"type": "text", "text": json.dumps(data)}]
             except ValueError as e:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": str(e)}, "id": request_id}
         
@@ -1685,7 +1283,7 @@ async def _handle_tools_call(
             if not plan_id or not transaction_id:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id and transaction_id are required"}, "id": request_id}
             data = await client.get_transaction(plan_id, transaction_id)
-            content = [{ "type": "application/json", "text": json.dumps(data) }]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "create_transaction":
             plan_id = arguments.get("plan_id")
@@ -1693,7 +1291,7 @@ async def _handle_tools_call(
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id is required"}, "id": request_id}
             transaction_data = arguments.get("transaction") or arguments.get("transactions", {})
             data = await client.create_transaction(plan_id, transaction_data)
-            content = [{ "type": "application/json", "text": json.dumps(data) }]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "update_transaction":
             plan_id = arguments.get("plan_id")
@@ -1702,7 +1300,7 @@ async def _handle_tools_call(
             if not plan_id or not transaction_id or not transaction_data:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id, transaction_id, and transaction are required"}, "id": request_id}
             data = await client.update_transaction(plan_id, transaction_id, transaction_data)
-            content = [{ "type": "application/json", "text": json.dumps(data) }]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "update_transactions":
             plan_id = arguments.get("plan_id")
@@ -1710,7 +1308,7 @@ async def _handle_tools_call(
             if not plan_id or not transactions:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id and transactions are required"}, "id": request_id}
             data = await client.update_transactions(plan_id, transactions)
-            content = [{ "type": "application/json", "text": json.dumps(data) }]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "delete_transaction":
             plan_id = arguments.get("plan_id")
@@ -1718,7 +1316,7 @@ async def _handle_tools_call(
             if not plan_id or not transaction_id:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id and transaction_id are required"}, "id": request_id}
             data = await client.delete_transaction(plan_id, transaction_id)
-            content = [{ "type": "application/json", "text": json.dumps(data) }]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "import_transactions":
             plan_id = arguments.get("plan_id")
@@ -1734,7 +1332,7 @@ async def _handle_tools_call(
             if not plan_id:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id is required"}, "id": request_id}
             data = await client.get_scheduled_transactions(plan_id, last_knowledge_of_server=last_knowledge)
-            content = [{ "type": "application/json", "text": json.dumps(data) }]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "get_scheduled_transaction":
             plan_id = arguments.get("plan_id")
@@ -1742,7 +1340,7 @@ async def _handle_tools_call(
             if not plan_id or not scheduled_transaction_id:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id and scheduled_transaction_id are required"}, "id": request_id}
             data = await client.get_scheduled_transaction(plan_id, scheduled_transaction_id)
-            content = [{ "type": "application/json", "text": json.dumps(data) }]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "create_scheduled_transaction":
             plan_id = arguments.get("plan_id")
@@ -1750,7 +1348,7 @@ async def _handle_tools_call(
             if not plan_id or not transaction_data:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id and scheduled_transaction are required"}, "id": request_id}
             data = await client.create_scheduled_transaction(plan_id, transaction_data)
-            content = [{ "type": "application/json", "text": json.dumps(data) }]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "update_scheduled_transaction":
             plan_id = arguments.get("plan_id")
@@ -1759,7 +1357,7 @@ async def _handle_tools_call(
             if not plan_id or not scheduled_transaction_id or not transaction_data:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id, scheduled_transaction_id, and scheduled_transaction are required"}, "id": request_id}
             data = await client.update_scheduled_transaction(plan_id, scheduled_transaction_id, transaction_data)
-            content = [{ "type": "application/json", "text": json.dumps(data) }]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "delete_scheduled_transaction":
             plan_id = arguments.get("plan_id")
@@ -1767,7 +1365,7 @@ async def _handle_tools_call(
             if not plan_id or not scheduled_transaction_id:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id and scheduled_transaction_id are required"}, "id": request_id}
             data = await client.delete_scheduled_transaction(plan_id, scheduled_transaction_id)
-            content = [{ "type": "application/json", "text": json.dumps(data) }]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         else:
             return {
@@ -1780,6 +1378,7 @@ async def _handle_tools_call(
             "jsonrpc": "2.0",
             "result": {
                 "content": content,
+                "isError": False,
             },
             "id": request_id,
         }
