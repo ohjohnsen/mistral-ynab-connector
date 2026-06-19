@@ -199,6 +199,7 @@ ynab://plan/{plan_id}/money_movement_groups
 - `create_payee` - Create a new payee
 - `update_payee` - Update a payee
 
+
 **Months:**
 - `get_months` - List all months for a plan
 - `get_month` - Get a specific month
