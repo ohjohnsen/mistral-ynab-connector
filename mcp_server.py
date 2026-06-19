@@ -7,6 +7,7 @@ All endpoints use the official YNAB API v1.85.0 terminology (/plans/ not /budget
 """
 
 from contextlib import asynccontextmanager
+import json
 from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
@@ -737,13 +738,13 @@ async def _handle_tools_call(
         # User tools
         if name == "get_user":
             data = await client.get_user()
-            content = [{"type": "text", "text": str(data)}]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         # Plans tools
         elif name == "get_plans":
             include_accounts = arguments.get("include_accounts", False)
             data = await client.get_plans(include_accounts=include_accounts)
-            content = [{"type": "text", "text": str(data)}]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "get_plan":
             plan_id = arguments.get("plan_id")
@@ -751,14 +752,14 @@ async def _handle_tools_call(
             if not plan_id:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id is required"}, "id": request_id}
             data = await client.get_plan(plan_id, last_knowledge_of_server=last_knowledge)
-            content = [{"type": "text", "text": str(data)}]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "get_plan_settings":
             plan_id = arguments.get("plan_id")
             if not plan_id:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id is required"}, "id": request_id}
             data = await client.get_plan_settings(plan_id)
-            content = [{"type": "text", "text": str(data)}]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         # Accounts tools
         elif name == "get_accounts":
@@ -767,7 +768,7 @@ async def _handle_tools_call(
             if not plan_id:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id is required"}, "id": request_id}
             data = await client.get_accounts(plan_id, last_knowledge_of_server=last_knowledge)
-            content = [{"type": "text", "text": str(data)}]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "get_account":
             plan_id = arguments.get("plan_id")
@@ -775,7 +776,7 @@ async def _handle_tools_call(
             if not plan_id or not account_id:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id and account_id are required"}, "id": request_id}
             data = await client.get_account(plan_id, account_id)
-            content = [{"type": "text", "text": str(data)}]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "create_account":
             plan_id = arguments.get("plan_id")
@@ -783,7 +784,7 @@ async def _handle_tools_call(
             if not plan_id or not account_data:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id and account are required"}, "id": request_id}
             data = await client.create_account(plan_id, account_data)
-            content = [{"type": "text", "text": f"Created account: {data}"}]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         # Categories tools
         elif name == "get_categories":
@@ -792,7 +793,7 @@ async def _handle_tools_call(
             if not plan_id:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id is required"}, "id": request_id}
             data = await client.get_categories(plan_id, last_knowledge_of_server=last_knowledge)
-            content = [{"type": "text", "text": str(data)}]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "get_category":
             plan_id = arguments.get("plan_id")
@@ -800,7 +801,7 @@ async def _handle_tools_call(
             if not plan_id or not category_id:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id and category_id are required"}, "id": request_id}
             data = await client.get_category(plan_id, category_id)
-            content = [{"type": "text", "text": str(data)}]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "create_category":
             plan_id = arguments.get("plan_id")
@@ -808,7 +809,7 @@ async def _handle_tools_call(
             if not plan_id or not category_data:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id and category are required"}, "id": request_id}
             data = await client.create_category(plan_id, category_data)
-            content = [{"type": "text", "text": f"Created category: {data}"}]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "update_category":
             plan_id = arguments.get("plan_id")
@@ -817,7 +818,7 @@ async def _handle_tools_call(
             if not plan_id or not category_id or not category_data:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id, category_id, and category are required"}, "id": request_id}
             data = await client.update_category(plan_id, category_id, category_data)
-            content = [{"type": "text", "text": f"Updated category: {data}"}]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         # Payees tools
         elif name == "get_payees":
@@ -826,7 +827,7 @@ async def _handle_tools_call(
             if not plan_id:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id is required"}, "id": request_id}
             data = await client.get_payees(plan_id, last_knowledge_of_server=last_knowledge)
-            content = [{"type": "text", "text": str(data)}]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "get_payee":
             plan_id = arguments.get("plan_id")
@@ -834,7 +835,7 @@ async def _handle_tools_call(
             if not plan_id or not payee_id:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id and payee_id are required"}, "id": request_id}
             data = await client.get_payee(plan_id, payee_id)
-            content = [{"type": "text", "text": str(data)}]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "create_payee":
             plan_id = arguments.get("plan_id")
@@ -842,7 +843,7 @@ async def _handle_tools_call(
             if not plan_id or not payee_data:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id and payee are required"}, "id": request_id}
             data = await client.create_payee(plan_id, payee_data)
-            content = [{"type": "text", "text": f"Created payee: {data}"}]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         # Months tools
         elif name == "get_months":
@@ -851,7 +852,7 @@ async def _handle_tools_call(
             if not plan_id:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id is required"}, "id": request_id}
             data = await client.get_months(plan_id, last_knowledge_of_server=last_knowledge)
-            content = [{"type": "text", "text": str(data)}]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "get_month":
             plan_id = arguments.get("plan_id")
@@ -859,7 +860,7 @@ async def _handle_tools_call(
             if not plan_id or not month:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id and month are required"}, "id": request_id}
             data = await client.get_month(plan_id, month)
-            content = [{"type": "text", "text": str(data)}]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         # Transactions tools
         elif name == "get_transactions":
@@ -877,7 +878,7 @@ async def _handle_tools_call(
                 type_filter=type_filter,
                 last_knowledge_of_server=last_knowledge,
             )
-            content = [{"type": "text", "text": str(data)}]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "get_transaction":
             plan_id = arguments.get("plan_id")
@@ -885,7 +886,7 @@ async def _handle_tools_call(
             if not plan_id or not transaction_id:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id and transaction_id are required"}, "id": request_id}
             data = await client.get_transaction(plan_id, transaction_id)
-            content = [{"type": "text", "text": str(data)}]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "create_transaction":
             plan_id = arguments.get("plan_id")
@@ -893,7 +894,7 @@ async def _handle_tools_call(
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id is required"}, "id": request_id}
             transaction_data = arguments.get("transaction") or arguments.get("transactions", {})
             data = await client.create_transaction(plan_id, transaction_data)
-            content = [{"type": "text", "text": f"Created transaction(s): {data}"}]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "update_transaction":
             plan_id = arguments.get("plan_id")
@@ -902,7 +903,7 @@ async def _handle_tools_call(
             if not plan_id or not transaction_id or not transaction_data:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id, transaction_id, and transaction are required"}, "id": request_id}
             data = await client.update_transaction(plan_id, transaction_id, transaction_data)
-            content = [{"type": "text", "text": f"Updated transaction: {data}"}]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "update_transactions":
             plan_id = arguments.get("plan_id")
@@ -910,7 +911,7 @@ async def _handle_tools_call(
             if not plan_id or not transactions:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id and transactions are required"}, "id": request_id}
             data = await client.update_transactions(plan_id, transactions)
-            content = [{"type": "text", "text": f"Updated transactions: {data}"}]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "delete_transaction":
             plan_id = arguments.get("plan_id")
@@ -918,7 +919,7 @@ async def _handle_tools_call(
             if not plan_id or not transaction_id:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id and transaction_id are required"}, "id": request_id}
             data = await client.delete_transaction(plan_id, transaction_id)
-            content = [{"type": "text", "text": f"Deleted transaction: {data}"}]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "import_transactions":
             plan_id = arguments.get("plan_id")
@@ -934,7 +935,7 @@ async def _handle_tools_call(
             if not plan_id:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id is required"}, "id": request_id}
             data = await client.get_scheduled_transactions(plan_id, last_knowledge_of_server=last_knowledge)
-            content = [{"type": "text", "text": str(data)}]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "get_scheduled_transaction":
             plan_id = arguments.get("plan_id")
@@ -942,7 +943,7 @@ async def _handle_tools_call(
             if not plan_id or not scheduled_transaction_id:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id and scheduled_transaction_id are required"}, "id": request_id}
             data = await client.get_scheduled_transaction(plan_id, scheduled_transaction_id)
-            content = [{"type": "text", "text": str(data)}]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "create_scheduled_transaction":
             plan_id = arguments.get("plan_id")
@@ -950,7 +951,7 @@ async def _handle_tools_call(
             if not plan_id or not transaction_data:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id and scheduled_transaction are required"}, "id": request_id}
             data = await client.create_scheduled_transaction(plan_id, transaction_data)
-            content = [{"type": "text", "text": f"Created scheduled transaction: {data}"}]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "update_scheduled_transaction":
             plan_id = arguments.get("plan_id")
@@ -959,7 +960,7 @@ async def _handle_tools_call(
             if not plan_id or not scheduled_transaction_id or not transaction_data:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id, scheduled_transaction_id, and scheduled_transaction are required"}, "id": request_id}
             data = await client.update_scheduled_transaction(plan_id, scheduled_transaction_id, transaction_data)
-            content = [{"type": "text", "text": f"Updated scheduled transaction: {data}"}]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         elif name == "delete_scheduled_transaction":
             plan_id = arguments.get("plan_id")
@@ -967,7 +968,7 @@ async def _handle_tools_call(
             if not plan_id or not scheduled_transaction_id:
                 return {"jsonrpc": "2.0", "error": {"code": -32602, "message": "plan_id and scheduled_transaction_id are required"}, "id": request_id}
             data = await client.delete_scheduled_transaction(plan_id, scheduled_transaction_id)
-            content = [{"type": "text", "text": f"Deleted scheduled transaction: {data}"}]
+            content = [{"type": "text", "text": json.dumps(data)}]
         
         else:
             return {
@@ -1168,7 +1169,7 @@ async def _handle_resources_read(
                 {
                     "uri": uri,
                     "mimeType": "application/json",
-                    "text": str(data),
+                    "text": json.dumps(data),
                 }
             ],
             "id": request_id,
