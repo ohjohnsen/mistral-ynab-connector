@@ -1,13 +1,15 @@
 """Pytest configuration and fixtures for YNAB MCP Connector tests."""
 
 import os
-from unittest.mock import AsyncMock, patch
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 from config import Settings, settings
 from mcp_server import app
+from ynab_client import YNABClient
 
 
 @pytest.fixture
@@ -38,6 +40,92 @@ def real_env_settings():
     """Load real settings from .env file for integration tests."""
     # This uses the actual .env file configured in the project
     return settings
+
+
+@pytest.fixture
+def mock_ynab_client(monkeypatch):
+    """Create a mocked YNABClient with canned responses for unit tests.
+    
+    This fixture patches YNABClient to return mock data instead of making
+    real API calls, allowing for fast unit testing without API dependencies.
+    """
+    mock_client = MagicMock(spec=YNABClient)
+    
+    # Mock user data
+    mock_client.get_user.return_value = {
+        "data": {
+            "user": {
+                "id": "test-user-id-12345",
+                "email": "test@example.com"
+            }
+        }
+    }
+    
+    # Mock plans data
+    mock_client.get_plans.return_value = {
+        "data": {
+            "plans": [
+                {
+                    "id": "test-plan-id-001",
+                    "name": "Test Plan 1",
+                    "settings": {"id": "test-settings-id-001"}
+                },
+                {
+                    "id": "test-plan-id-002",
+                    "name": "Test Plan 2",
+                    "settings": {"id": "test-settings-id-002"}
+                }
+            ]
+        }
+    }
+    
+    # Mock get_plan data
+    def mock_get_plan(plan_id=None, **kwargs):
+        return {
+            "data": {
+                "plan": {
+                    "id": plan_id or "test-plan-id-001",
+                    "name": "Test Plan",
+                    "accounts": [
+                        {"id": "test-account-id-001", "name": "Checking"},
+                        {"id": "test-account-id-002", "name": "Savings"}
+                    ],
+                    "categories": [],
+                    "payees": [],
+                    "months": []
+                }
+            }
+        }
+    mock_client.get_plan.side_effect = mock_get_plan
+    
+    # Mock plan settings
+    mock_client.get_plan_settings.return_value = {
+        "data": {
+            "settings": {
+                "id": "test-settings-id",
+                "name": "Test Plan Settings"
+            }
+        }
+    }
+    
+    # Mock accounts
+    mock_client.get_accounts.return_value = {
+        "data": {
+            "accounts": [
+                {"id": "test-account-id-001", "name": "Checking", "type": "CHECKING"},
+                {"id": "test-account-id-002", "name": "Savings", "type": "SAVINGS"}
+            ]
+        }
+    }
+    
+    # Make async methods return AsyncMock for compatibility
+    mock_client._make_request = AsyncMock()
+    
+    # Patch the YNABClient class in both ynab_client and mcp_server modules
+    monkeypatch.setattr("ynab_client.YNABClient", lambda *args, **kwargs: mock_client)
+    monkeypatch.setattr("mcp_server.YNABClient", lambda *args, **kwargs: mock_client)
+    
+    return mock_client
 
 
 # Register custom markers
