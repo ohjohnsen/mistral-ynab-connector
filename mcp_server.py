@@ -487,7 +487,7 @@ async def _handle_tools_list(
             "approved": {"type": "boolean", "description": "Whether the transaction is approved"},
             "flag_color": {
                 "type": "string",
-                "enum": ["red", "orange", "yellow", "green", "blue", "purple", "pink", "brown", "grey", "black", null],
+                "enum": ["red", "orange", "yellow", "green", "blue", "purple", "pink", "brown", "grey", "black"],
                 "description": "Color flag for the transaction"
             },
             "account_id": {"type": "string", "description": "ID of the account the transaction belongs to"},
@@ -538,7 +538,7 @@ async def _handle_tools_list(
             "memo": {"type": "string", "description": "Memo or description"},
             "flag_color": {
                 "type": "string",
-                "enum": ["red", "orange", "yellow", "green", "blue", "purple", "pink", "brown", "grey", "black", null],
+                "enum": ["red", "orange", "yellow", "green", "blue", "purple", "pink", "brown", "grey", "black"],
                 "description": "Color flag"
             },
             "account_id": {"type": "string", "description": "ID of the account"},
