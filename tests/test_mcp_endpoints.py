@@ -8,7 +8,7 @@ class TestMCPEndpointBasics:
 
     def test_post_mcp_requires_json(self, test_client):
         """Test that POST /mcp requires valid JSON."""
-        response = test_client.post("/mcp", data="not json")
+        response = test_client.post("/mcp", content="not json")
         
         assert response.status_code == 400
         data = response.json()
