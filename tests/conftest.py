@@ -132,6 +132,60 @@ def mock_ynab_client(monkeypatch):
         }
     }
     
+    # Mock transactions
+    mock_client.get_transactions.return_value = {
+        "data": {
+            "transactions": [
+                {
+                    "id": "test-transaction-id-001",
+                    "date": "2024-01-15",
+                    "amount": 100000,
+                    "payee_name": "Grocery Store",
+                    "category_name": "Food",
+                    "account_id": "test-account-id-001",
+                    "cleared": "cleared",
+                    "approved": True
+                },
+                {
+                    "id": "test-transaction-id-002",
+                    "date": "2024-01-16",
+                    "amount": 50000,
+                    "payee_name": "Gas Station",
+                    "category_name": "Transportation",
+                    "account_id": "test-account-id-001",
+                    "cleared": "cleared",
+                    "approved": True
+                },
+                {
+                    "id": "test-transaction-id-003",
+                    "date": "2024-01-17",
+                    "amount": 75000,
+                    "payee_name": "Restaurant",
+                    "category_name": "Food",
+                    "account_id": "test-account-id-002",
+                    "cleared": "uncategorized",
+                    "approved": False
+                }
+            ]
+        }
+    }
+    
+    # Mock get_transaction for individual transaction
+    mock_client.get_transaction.return_value = {
+        "data": {
+            "transaction": {
+                "id": "test-transaction-id-001",
+                "date": "2024-01-15",
+                "amount": 100000,
+                "payee_name": "Grocery Store",
+                "category_name": "Food",
+                "account_id": "test-account-id-001",
+                "cleared": "cleared",
+                "approved": True
+            }
+        }
+    }
+    
     # Make async methods return AsyncMock for compatibility
     mock_client._make_request = AsyncMock()
     

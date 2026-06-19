@@ -114,6 +114,17 @@ This connector implements the **official YNAB API v1.85.0** specification.
 | Scheduled Transactions | Read, Create, Update, Delete | Future-dated transactions |
 | Money Movements | Read | Money movement history |
 
+## Parameter Validation
+
+The connector validates all input parameters and returns clear error messages:
+
+- **Required parameters**: Returns `"{param_name} is required"` if missing
+- **Date parameters**: Must be in `YYYY-MM-DD` format (e.g., `"2024-01-15"`)
+- **Type validation**: Parameters must match their expected types
+- **Pagination**: `limit` must be a positive integer, `offset` must be non-negative
+
+Invalid requests return JSON-RPC error responses with code `-32602` (Invalid params).
+
 ## MCP Integration
 
 This connector implements the **Model Context Protocol (MCP)** specification using **JSON-RPC 2.0**, allowing AI assistants to interact with YNAB data.
@@ -245,10 +256,36 @@ ynab://plan/{plan_id}/money_movement_groups
   "arguments": {
     "plan_id": "your-plan-id",
     "since_date": "2024-01-01",
-    "type": "uncategorized"
+    "until_date": "2024-01-31",
+    "type": "uncategorized",
+    "limit": 50,
+    "offset": 0
   }
 }
 ```
+
+**Date Filtering:**
+- `since_date`: Transactions on or after this date (format: `YYYY-MM-DD`)
+- `until_date`: Transactions on or before this date (format: `YYYY-MM-DD`)
+- Both parameters are optional. If not provided, all transactions are returned.
+- Invalid date formats return a clear error message.
+
+**Pagination:**
+- `limit`: Maximum number of transactions to return (client-side pagination)
+- `offset`: Number of transactions to skip
+- When `limit` is specified, the response includes pagination metadata:
+  ```json
+  {
+    "data": {
+      "transactions": [...],
+      "pagination": {
+        "limit": 50,
+        "offset": 0,
+        "total": 125
+      }
+    }
+  }
+  ```
 
 **Create Transaction:**
 ```json
