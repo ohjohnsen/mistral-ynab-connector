@@ -6,7 +6,7 @@ import pytest
 class TestUserResourceList:
     """Tests for listing user resources."""
 
-    def test_resources_list_includes_user(self, test_client, mock_settings):
+    def test_resources_list_includes_user(self, test_client, mock_settings, mock_ynab_client):
         """Test that resources/list includes the user resource."""
         response = test_client.post(
             "/mcp",
@@ -20,7 +20,7 @@ class TestUserResourceList:
         uris = [r["uri"] for r in resources]
         assert "ynab://user" in uris
 
-    def test_user_resource_has_correct_fields(self, test_client, mock_settings):
+    def test_user_resource_has_correct_fields(self, test_client, mock_settings, mock_ynab_client):
         """Test that the user resource has correct metadata."""
         response = test_client.post(
             "/mcp",
@@ -44,7 +44,7 @@ class TestUserResourceList:
 class TestUserResourceRead:
     """Tests for reading user resource via MCP."""
 
-    def test_resources_read_user(self, test_client, mock_settings):
+    def test_resources_read_user(self, test_client, mock_settings, mock_ynab_client):
         """Test reading the user resource via MCP resources/read."""
         response = test_client.post(
             "/mcp",
@@ -105,7 +105,7 @@ class TestUserResourceRead:
 class TestUserToolCall:
     """Tests for user tool operations via MCP."""
 
-    def test_tools_call_get_user(self, test_client, mock_settings):
+    def test_tools_call_get_user(self, test_client, mock_settings, mock_ynab_client):
         """Test calling the get_user tool via MCP tools/call."""
         response = test_client.post(
             "/mcp",

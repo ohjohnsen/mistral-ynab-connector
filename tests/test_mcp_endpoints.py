@@ -128,7 +128,7 @@ class TestMCPToolsList:
 class TestMCPResourcesList:
     """Tests for the resources/list method."""
 
-    def test_resources_list_returns_resources(self, test_client, mock_settings):
+    def test_resources_list_returns_resources(self, test_client, mock_settings, mock_ynab_client):
         """Test that resources/list returns available resources."""
         response = test_client.post(
             "/mcp",
@@ -151,7 +151,7 @@ class TestMCPResourcesList:
             assert "description" in resource
             assert "mimeType" in resource
 
-    def test_resources_list_includes_user(self, test_client, mock_settings):
+    def test_resources_list_includes_user(self, test_client, mock_settings, mock_ynab_client):
         """Test that resources/list includes the user resource."""
         response = test_client.post(
             "/mcp",
