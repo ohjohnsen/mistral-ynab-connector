@@ -103,20 +103,25 @@ jobs:
           TAG_NAME="v${{ steps.version.outputs.version }}"
           echo "Creating tag: $TAG_NAME"
           
-          # Check if tag already exists
-          if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
-            echo "::error::Tag $TAG_NAME already exists!"
-            echo "A tag with this version already exists. Please increment the version in pyproject.toml."
-            exit 1
-          fi
+          # Use GitHub API to create tag (works with GITHUB_TOKEN)
+          SHA=$(git rev-parse HEAD)
+          curl -s -X POST \
+            -H "Authorization: token ${{ github.token }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/git/tags" \
+            -d "{\"tag\":\"$TAG_NAME\",\"message\":\"Release v${{ steps.version.outputs.version }}\",\"object\":\"$SHA\",\"type\":\"commit\"}" \
+          || { echo "::error::Failed to create tag $TAG_NAME"; exit 1; }
           
-          # Create and push the tag
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git tag "$TAG_NAME"
-          git push origin "$TAG_NAME"
+          # Create reference to the tag
+          curl -s -X POST \
+            -H "Authorization: token ${{ github.token }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/git/refs" \
+            -d "{\"ref\":\"refs/tags/$TAG_NAME\",\"sha\":\"$SHA\"}" \
+          || { echo "::error::Failed to create tag reference $TAG_NAME"; exit 1; }
           
           echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+          echo "Successfully created tag: $TAG_NAME"
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
