@@ -9,7 +9,6 @@ WORKDIR /app
 RUN useradd --create-home --shell /bin/bash appuser
 
 # Install runtime dependencies
-COPY pyproject.toml .
 RUN pip install --no-cache-dir fastapi uvicorn[standard] pydantic pydantic-settings httpx
 
 # Copy application code
