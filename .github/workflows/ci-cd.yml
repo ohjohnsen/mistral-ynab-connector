@@ -11,8 +11,45 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  check-version:
+    name: Check Version Uniqueness
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract version from pyproject.toml
+        id: version
+        run: |
+          VERSION=$(grep -E "^version\s*=" pyproject.toml | cut -d'"' -f2)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Detected version: $VERSION"
+
+      - name: Check if version tag already exists
+        id: check-tag
+        run: |
+          # Check if tag v{version} exists (e.g., v0.1.0)
+          TAG_NAME="v${{ steps.version.outputs.version }}"
+          echo "Checking for existing tag: $TAG_NAME"
+          
+          # Use GitHub API to check for existing tag
+          TAG_EXISTS=$(curl -s -H "Authorization: token ${{ github.token }}" \
+            "https://api.github.com/repos/${{ github.repository }}/git/ref/tags/$TAG_NAME" \
+            | grep -q '"ref"' && echo "exists" || echo "not_exists")
+          
+          echo "tag_exists=$TAG_EXISTS" >> $GITHUB_OUTPUT
+          
+          if [ "$TAG_EXISTS" = "exists" ]; then
+            echo "::error::Version $VERSION already has a tag ($TAG_NAME) and cannot be reused."
+            echo "Please increment the version in pyproject.toml."
+            exit 1
+          fi
+
   test:
     name: Run Tests
+    needs: check-version
     runs-on: ubuntu-latest
     strategy:
       matrix:
