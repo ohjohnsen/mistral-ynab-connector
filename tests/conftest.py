@@ -15,7 +15,10 @@ from ynab_client import YNABClient
 @pytest.fixture
 def test_client():
     """Create a test client for the FastAPI app."""
-    return TestClient(app)
+    return TestClient(
+        app,
+        headers={"Authorization": "Bearer test_api_key_12345"},
+    )
 
 
 @pytest.fixture

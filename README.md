@@ -44,24 +44,12 @@ This installs all required dependencies:
 - Pydantic
 - HTTPX
 
-### 3. Configure Your YNAB API Key
+### 3. Authentication
 
-Copy the example environment file and add your YNAB API key:
+Authentication is bearer-token based at request time:
 
-```bash
-cp .env.example .env
-```
-
-Edit `.env` and set your YNAB API key:
-
-```bash
-YNAB_API_KEY=your_personal_access_token_here
-```
-
-You can also set it as an environment variable:
-
-```bash
-export YNAB_API_KEY=your_personal_access_token_here
+```http
+Authorization: Bearer <your_ynab_personal_access_token>
 ```
 
 ### 4. Run the Server
@@ -76,24 +64,33 @@ The server will start on `http://0.0.0.0:8000` with auto-reload enabled.
 
 ```bash
 curl http://localhost:8000/mcp/health
-# {"status":"healthy","version":"0.1.0"}
+# {"status":"healthy","version":"0.3.0"}
 
 curl http://localhost:8000/mcp/info
-# {"name":"YNAB Connector","version":"0.1.0",...}
+# {"name":"YNAB Connector","version":"0.3.0",...}
 ```
 
 ## Configuration
 
 ### Environment Variables
 
+No `.env` file is required.
+
+Authentication is required via HTTP header:
+
+```http
+Authorization: Bearer <your_ynab_personal_access_token>
+```
+
+Optional runtime overrides via environment variables are still supported if needed:
+
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `YNAB_API_KEY` | Yes | - | Your YNAB Personal Access Token |
 | `YNAB_API_URL` | No | `https://api.ynab.com/v1` | YNAB API base URL (v1.85.0) |
 | `SERVER_HOST` | No | `0.0.0.0` | Server host address |
 | `SERVER_PORT` | No | `8000` | Server port |
 | `MCP_NAME` | No | `YNAB Connector` | MCP server name |
-| `MCP_VERSION` | No | `0.1.0` | MCP server version |
+| `MCP_VERSION` | No | `0.3.0` | MCP server version |
 
 ## API Overview
 

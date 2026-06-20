@@ -8,20 +8,16 @@ All endpoints use the official YNAB API v1.85.0 terminology (/plans/ not /budget
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
 from datetime import datetime
 import json
 import re
 from typing import Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
 from config import settings
 from ynab_client import YNABClient
-
-# Global YNAB client instance
-_ynab_client: YNABClient | None = None
 
 
 # ============================================================================
@@ -84,57 +80,39 @@ def _validate_required_param(param: Any, param_name: str, expected_type: type | 
 
 
 def get_ynab_api_key(
-    authorization: str | None = Header(default=None),
+    authorization: str | None = None,
 ) -> str:
-    """Extract YNAB API key from Authorization header or settings.
-    
-    Supports MCP authentication via Bearer token in Authorization header.
-    Falls back to YNAB_API_KEY environment variable.
+    """Backward-compatible auth helper using bearer-header-only behavior.
+
+    Kept for tests/import compatibility. MCP runtime auth is enforced through
+    get_ynab_api_key_from_bearer_header.
     """
-    if authorization:
-        if authorization.startswith("Bearer "):
-            return authorization[7:]
-        return authorization
-    
-    if settings.ynab_api_key:
-        return settings.ynab_api_key
-    
+    return get_ynab_api_key_from_bearer_header(authorization)
+
+
+def get_ynab_client(api_key: str | None = None) -> YNABClient:
+    """Backward-compatible client helper kept for test/import compatibility."""
+    if api_key:
+        return YNABClient(api_key=api_key)
+    return YNABClient()
+
+
+def get_ynab_api_key_from_bearer_header(authorization: str | None) -> str:
+    """Extract YNAB API key strictly from Authorization Bearer header.
+
+    This helper is used by MCP JSON-RPC handlers to enforce header-based auth.
+    """
+    if authorization is not None:
+        auth_value = authorization.strip()
+        if auth_value.lower().startswith("bearer "):
+            token = auth_value[7:].strip()
+            if token:
+                return token
+
     raise HTTPException(
         status_code=401,
-        detail="Authentication required. Provide YNAB API key as Bearer token in Authorization header or set YNAB_API_KEY environment variable.",
+        detail="Authentication required. Provide YNAB API key as Bearer token in Authorization header.",
     )
-
-
-def get_ynab_client(
-    api_key: str = Depends(get_ynab_api_key),
-) -> YNABClient:
-    """Get or create the YNAB client instance with the provided API key."""
-    global _ynab_client
-    
-    # If we have a header-based API key, create a new client for this request
-    if api_key != settings.ynab_api_key:
-        return YNABClient(api_key=api_key)
-    
-    # Use the global client for env var based auth
-    if _ynab_client is None:
-        if not settings.ynab_api_key:
-            raise HTTPException(
-                status_code=400,
-                detail="YNAB_API_KEY not configured. Please set it in your environment.",
-            )
-        _ynab_client = YNABClient()
-    return _ynab_client
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Application lifespan manager."""
-    global _ynab_client
-    if settings.ynab_api_key:
-        _ynab_client = YNABClient()
-    yield
-    if _ynab_client:
-        _ynab_client.close()
 
 
 # Create FastAPI application
@@ -142,7 +120,6 @@ app = FastAPI(
     title=settings.mcp_name,
     version=settings.mcp_version,
     description="YNAB MCP Connector - Interact with You Need A Budget API v1",
-    lifespan=lifespan,
 )
 
 
@@ -284,24 +261,39 @@ async def mcp_handler(request: Request) -> JSONResponse:
             },
         )
     
+    authorization = request.headers.get("authorization")
+
     # Handle batch requests
     if isinstance(body, list):
         results = []
         for req in body:
-            result = await _handle_rpc_request(req)
+            result = await _handle_rpc_request(req, authorization=authorization)
             results.append(result)
         return JSONResponse(content=results)
     
     # Handle single request
-    result = await _handle_rpc_request(body)
+    result = await _handle_rpc_request(body, authorization=authorization)
     return JSONResponse(content=result)
 
 
-async def _handle_rpc_request(request: dict[str, Any]) -> dict[str, Any]:
+async def _handle_rpc_request(
+    request: dict[str, Any], authorization: str | None = None
+) -> dict[str, Any]:
     """Handle a single JSON-RPC 2.0 request."""
     request_id = request.get("id")
     method = request.get("method")
     params = request.get("params", {})
+
+    methods_requiring_auth = {
+        "tools/call",
+        "resources/list",
+        "resources/read",
+        "resources/write",
+    }
+
+    request_api_key: str | None = None
+    if method in methods_requiring_auth:
+        request_api_key = get_ynab_api_key_from_bearer_header(authorization)
     
     try:
         if method == "initialize":
@@ -309,13 +301,13 @@ async def _handle_rpc_request(request: dict[str, Any]) -> dict[str, Any]:
         elif method == "tools/list":
             result = await _handle_tools_list(params, request_id)
         elif method == "tools/call":
-            result = await _handle_tools_call(params, request_id)
+            result = await _handle_tools_call(params, request_id, api_key=request_api_key)
         elif method == "resources/list":
-            result = await _handle_resources_list(params, request_id)
+            result = await _handle_resources_list(params, request_id, api_key=request_api_key)
         elif method == "resources/read":
-            result = await _handle_resources_read(params, request_id)
+            result = await _handle_resources_read(params, request_id, api_key=request_api_key)
         elif method == "resources/write":
-            result = await _handle_resources_write(params, request_id)
+            result = await _handle_resources_write(params, request_id, api_key=request_api_key)
         else:
             result = {
                 "jsonrpc": "2.0",
@@ -1080,13 +1072,16 @@ async def _handle_tools_list(
 
 
 async def _handle_tools_call(
-    params: dict[str, Any], request_id: Any
+    params: dict[str, Any], request_id: Any, api_key: str | None = None
 ) -> dict[str, Any]:
     """Handle MCP tools/call request."""
     name = params.get("name")
     arguments = params.get("arguments", {})
     
-    client = YNABClient(api_key=settings.ynab_api_key)
+    if not api_key:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    client = YNABClient(api_key=api_key)
     
     try:
         # User tools
@@ -1388,13 +1383,16 @@ async def _handle_tools_call(
 
 
 async def _handle_resources_list(
-    params: dict[str, Any], request_id: Any
+    params: dict[str, Any], request_id: Any, api_key: str | None = None
 ) -> dict[str, Any]:
     """Handle MCP resources/list request.
     
     Lists available YNAB resources that can be read.
     """
-    client = YNABClient(api_key=settings.ynab_api_key)
+    if not api_key:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    client = YNABClient(api_key=api_key)
     
     try:
         resources = []
@@ -1492,7 +1490,7 @@ async def _handle_resources_list(
 
 
 async def _handle_resources_read(
-    params: dict[str, Any], request_id: Any
+    params: dict[str, Any], request_id: Any, api_key: str | None = None
 ) -> dict[str, Any]:
     """Handle MCP resources/read request.
     
@@ -1507,7 +1505,10 @@ async def _handle_resources_read(
             "id": request_id,
         }
     
-    client = YNABClient(api_key=settings.ynab_api_key)
+    if not api_key:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    client = YNABClient(api_key=api_key)
     
     try:
         # Parse the URI and fetch data
@@ -1578,7 +1579,7 @@ async def _handle_resources_read(
 
 
 async def _handle_resources_write(
-    params: dict[str, Any], request_id: Any
+    params: dict[str, Any], request_id: Any, api_key: str | None = None
 ) -> dict[str, Any]:
     """Handle MCP resources/write request.
     
@@ -1601,7 +1602,10 @@ async def _handle_resources_write(
             "id": request_id,
         }
     
-    client = YNABClient(api_key=settings.ynab_api_key)
+    if not api_key:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    client = YNABClient(api_key=api_key)
     
     try:
         data = json.loads(content)

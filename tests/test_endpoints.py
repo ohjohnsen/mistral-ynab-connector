@@ -2,6 +2,8 @@
 
 import pytest
 
+from config import settings
+
 
 class TestHealthEndpoint:
     """Tests for the /mcp/health endpoint."""
@@ -13,7 +15,7 @@ class TestHealthEndpoint:
         assert response.status_code == 200
         assert response.json() == {
             "status": "healthy",
-            "version": "0.1.0"
+            "version": settings.mcp_version
         }
 
 
@@ -41,7 +43,7 @@ class TestInfoEndpoint:
         
         # Check top-level fields
         assert data["name"] == "YNAB Connector"
-        assert data["version"] == "0.1.0"
+        assert data["version"] == settings.mcp_version
         assert "YNAB API Connector aligned with official OpenAPI spec" in data["description"]
         assert data["api_version"] == "1.85.0"
         
@@ -73,7 +75,7 @@ class TestServerCardEndpoint:
         data = response.json()
         
         assert data["name"] == "YNAB Connector"
-        assert data["version"] == "0.1.0"
+        assert data["version"] == settings.mcp_version
         assert data["url"] == "/mcp"
         assert "auth" in data
         assert data["auth"]["type"] == "api_key"
