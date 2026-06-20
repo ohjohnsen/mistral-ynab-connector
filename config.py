@@ -2,7 +2,21 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+import tomllib
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _default_connector_version() -> str:
+    """Read connector version from pyproject.toml with a safe fallback."""
+    fallback_version = "0.3.0"
+    try:
+        pyproject_path = Path(__file__).with_name("pyproject.toml")
+        data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
+        return str(data.get("project", {}).get("version", fallback_version))
+    except Exception:
+        return fallback_version
 
 
 class Settings(BaseSettings):
@@ -24,7 +38,7 @@ class Settings(BaseSettings):
 
     # MCP Configuration
     mcp_name: str = "YNAB Connector"
-    mcp_version: str = "0.1.0"
+    mcp_version: str = _default_connector_version()
 
     @property
     def ynab_headers(self) -> dict[str, str]:

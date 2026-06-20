@@ -20,7 +20,7 @@ class TestSettingsInitialization:
         assert config.server_host == "0.0.0.0"
         assert config.server_port == 8000
         assert config.mcp_name == "YNAB Connector"
-        assert config.mcp_version == "0.1.0"
+        assert config.mcp_version == settings.mcp_version
 
     def test_custom_settings(self):
         """Test that custom settings override defaults."""

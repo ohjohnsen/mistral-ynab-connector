@@ -18,6 +18,9 @@ class TestYNABClientInitialization:
 
     def test_client_initialization_with_env_key(self, real_env_settings):
         """Test that client initializes with API key from environment."""
+        if not settings.ynab_api_key:
+            pytest.skip("YNAB_API_KEY not configured in environment")
+
         # This test uses the real API key from .env
         client = YNABClient()
         
