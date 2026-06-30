@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     ynab_api_key: str = ""
     ynab_api_url: str = "https://api.ynab.com/v1"
 
+    # OAuth Configuration (for Claude.ai MCP integration)
+    oauth_client_id: str = ""
+    oauth_client_secret: str = ""
+    oauth_redirect_uri: str = "https://claude.ai/api/mcp/auth_callback"
+
     # Server Configuration
     server_host: str = "0.0.0.0"
     server_port: int = 8000

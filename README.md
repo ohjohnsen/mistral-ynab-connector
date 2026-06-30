@@ -1,10 +1,11 @@
 # YNAB MCP Connector
 
-A Model Context Protocol (MCP) connector for You Need A Budget (YNAB) that exposes the official YNAB API v1.85.0 functionality to AI assistants like Mistral.
+A Model Context Protocol (MCP) connector for You Need A Budget (YNAB) that exposes the official YNAB API v1.85.0 functionality to AI assistants like Claude.ai and Mistral.
 
 ## Features
 
 - **MCP Standard Endpoints**: Health checks, server info, and capabilities
+- **OAuth 2.0 Authentication**: Authorization Code + PKCE S256 flow with refresh tokens, compatible with Claude.ai connectors
 - **Plans Management**: List and retrieve YNAB plan details with all related entities
 - **User Information**: Get authenticated user data
 - **Accounts Management**: Full CRUD operations for accounts
@@ -44,13 +45,17 @@ This installs all required dependencies:
 - Pydantic
 - HTTPX
 
-### 3. Authentication
+### 3. Configure `.env`
 
-Authentication is bearer-token based at request time:
+Create a `.env` file in the project root:
 
-```http
-Authorization: Bearer <your_ynab_personal_access_token>
+```env
+YNAB_API_KEY=your_ynab_personal_access_token
+OAUTH_CLIENT_ID=choose_any_client_id
+OAUTH_CLIENT_SECRET=choose_any_client_secret
 ```
+
+See [Authentication](#authentication) below for what these do and when `OAUTH_CLIENT_ID`/`OAUTH_CLIENT_SECRET` are needed.
 
 ### 4. Run the Server
 
@@ -70,27 +75,57 @@ curl http://localhost:8000/mcp/info
 # {"name":"YNAB Connector","version":"0.3.0",...}
 ```
 
-## Configuration
+## Authentication
 
-### Environment Variables
+This connector supports two authentication modes, chosen automatically based on whether `OAUTH_CLIENT_SECRET` is set.
 
-No `.env` file is required.
+### Mode 1: OAuth 2.0 (for Claude.ai and other MCP clients that require OAuth)
 
-Authentication is required via HTTP header:
+Set `OAUTH_CLIENT_ID` and `OAUTH_CLIENT_SECRET` in `.env` (any values you choose) along with `YNAB_API_KEY`. The connector then:
+
+- Implements the **Authorization Code + PKCE (S256)** flow required by Claude.ai
+- Auto-approves and redirects immediately — there is no consent page, since this connector is single-owner
+- Issues self-verifying, HMAC-signed access tokens (1 hour) and refresh tokens (30 days) — no server-side session state, so tokens survive server restarts
+- Returns a real HTTP `401` with a `WWW-Authenticate` header on unauthenticated MCP requests, so OAuth-aware clients can discover the flow
+
+Relevant endpoints:
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/.well-known/oauth-protected-resource` | RFC 9728 — tells clients which auth server issues tokens for this resource |
+| GET | `/.well-known/oauth-authorization-server` | RFC 8414 — authorization server metadata |
+| GET | `/oauth/authorize` | Authorization endpoint (redirects with a code) |
+| POST | `/oauth/token` | Token endpoint — `authorization_code` and `refresh_token` grants |
+
+The registered redirect URI defaults to Claude.ai's callback (`https://claude.ai/api/mcp/auth_callback`), overridable via `OAUTH_REDIRECT_URI`.
+
+In this mode, the YNAB API key lives only in the server's `.env` — it is never passed by the client.
+
+### Mode 2: Direct Bearer Token (no `.env` required)
+
+If `OAUTH_CLIENT_SECRET` is left unset, the connector falls back to treating the `Authorization` header as a YNAB personal access token directly:
 
 ```http
 Authorization: Bearer <your_ynab_personal_access_token>
 ```
 
-Optional runtime overrides via environment variables are still supported if needed:
+`YNAB_API_KEY` is not used in this mode — each request supplies its own token.
+
+## Configuration
+
+### Environment Variables
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
+| `YNAB_API_KEY` | Yes, if using OAuth mode | `""` | YNAB personal access token, used server-side once an OAuth token is verified |
 | `YNAB_API_URL` | No | `https://api.ynab.com/v1` | YNAB API base URL (v1.85.0) |
+| `OAUTH_CLIENT_ID` | No (enables OAuth mode when set with secret) | `""` | Client ID issued to MCP clients connecting via OAuth |
+| `OAUTH_CLIENT_SECRET` | No (enables OAuth mode when set) | `""` | Shared secret; also used as the HMAC signing key for issued tokens |
+| `OAUTH_REDIRECT_URI` | No | `https://claude.ai/api/mcp/auth_callback` | Registered OAuth redirect URI |
 | `SERVER_HOST` | No | `0.0.0.0` | Server host address |
 | `SERVER_PORT` | No | `8000` | Server port |
 | `MCP_NAME` | No | `YNAB Connector` | MCP server name |
-| `MCP_VERSION` | No | `0.3.0` | MCP server version |
+| `MCP_VERSION` | No | version from `pyproject.toml` | MCP server version |
 
 ## API Overview
 
@@ -122,6 +157,8 @@ The connector validates all input parameters and returns clear error messages:
 
 Invalid requests return JSON-RPC error responses with code `-32602` (Invalid params).
 
+Authentication failures on methods that require it (`tools/call`, `resources/list`, `resources/read`, `resources/write`) return a real HTTP `401` (with `WWW-Authenticate` in OAuth mode) rather than a JSON-RPC error body, so OAuth-aware clients can detect and trigger re-authentication. All other errors are returned as HTTP 200 with a JSON-RPC error body, per the MCP JSON-RPC convention.
+
 ## MCP Integration
 
 This connector implements the **Model Context Protocol (MCP)** specification using **JSON-RPC 2.0**, allowing AI assistants to interact with YNAB data.
@@ -130,6 +167,7 @@ This connector implements the **Model Context Protocol (MCP)** specification usi
 
 - **Server Card**: `GET /.well-known/mcp/server-card`
 - **MCP Endpoint**: `POST /mcp` (JSON-RPC 2.0)
+- **OAuth Discovery**: `GET /.well-known/oauth-protected-resource`, `GET /.well-known/oauth-authorization-server` (see [Authentication](#authentication))
 
 ### Resource URIs
 
@@ -358,6 +396,11 @@ For direct HTTP access (in addition to MCP JSON-RPC):
 |--------|----------|-------------|
 | GET | `/mcp/health` | Health check |
 | GET | `/mcp/info` | Server info and capabilities |
+| GET | `/.well-known/mcp/server-card` | MCP server discovery card |
+| GET | `/.well-known/oauth-protected-resource` | OAuth protected resource metadata (RFC 9728) |
+| GET | `/.well-known/oauth-authorization-server` | OAuth authorization server metadata (RFC 8414) |
+| GET | `/oauth/authorize` | OAuth authorization endpoint |
+| POST | `/oauth/token` | OAuth token endpoint (`authorization_code`, `refresh_token` grants) |
 
 ## Project Structure
 
@@ -365,11 +408,13 @@ For direct HTTP access (in addition to MCP JSON-RPC):
 mistral-ynab-connector/
 ├── main.py              # Server entry point
 ├── config.py            # Configuration management
-├── mcp_server.py        # FastAPI application with MCP JSON-RPC endpoints
+├── mcp_server.py        # FastAPI application with MCP JSON-RPC + OAuth endpoints
 ├── ynab_client.py       # YNAB API v1.85.0 client (aligned with official spec)
 ├── api-1.json           # YNAB OpenAPI specification v1.85.0
 ├── pyproject.toml       # Project configuration
-├── .env.example         # Environment template
+├── Dockerfile           # Container image definition
+├── docker-compose.yml   # Container deployment config
+├── tests/               # Unit and integration tests
 ├── .gitignore
 └── README.md
 ```
@@ -379,7 +424,7 @@ mistral-ynab-connector/
 ### Currency Amounts
 - All monetary values use **milliunits** format (integer)
 - Example: $1.23 = 1230, $100 = 100000
-- Formatted values (e.g., `balance_formatted`) are also available in responses
+- The connector passes amounts through exactly as returned by the YNAB API — no formatted/currency convenience fields are added
 
 ### Dates
 - ISO 8601 format: `YYYY-MM-DD`
@@ -433,4 +478,4 @@ For more information on the YNAB API v1.85.0, see:
 
 ## License
 
-This project is provided as-is for use with Mistral and YNAB.
+This project is provided as-is for use with Mistral, Claude.ai, and YNAB.
