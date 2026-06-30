@@ -13,11 +13,14 @@ from datetime import datetime
 import hashlib
 import hmac
 import json
+import logging
 import re
 import secrets
 import time
 from typing import Any
 from urllib.parse import parse_qs, urlencode
+
+logger = logging.getLogger(__name__)
 
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -392,9 +395,11 @@ async def oauth_authorize(request: Request) -> Response:
 
     # Validate client_id before trusting redirect_uri (prevents open redirect)
     if not secrets.compare_digest(client_id, settings.oauth_client_id):
+        logger.warning("OAuth authorize rejected: client_id mismatch (got %r, expected %r)", client_id, settings.oauth_client_id)
         return JSONResponse(status_code=400, content={"error": "invalid_client", "error_description": "Unknown client_id"})
 
     if redirect_uri != settings.oauth_redirect_uri:
+        logger.warning("OAuth authorize rejected: redirect_uri mismatch (got %r, configured %r)", redirect_uri, settings.oauth_redirect_uri)
         return JSONResponse(
             status_code=400,
             content={"error": "invalid_redirect_uri", "error_description": f"Registered redirect URI: {settings.oauth_redirect_uri}"},
