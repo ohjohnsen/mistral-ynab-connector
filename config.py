@@ -7,6 +7,12 @@ import tomllib
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Only load .env file if it actually exists — otherwise rely purely on OS
+# environment variables (e.g. when running in Docker with env vars injected
+# via docker-compose). Without this guard, pydantic-settings may silently
+# prefer the absent file path over real environment variables on some versions.
+_env_file = ".env" if Path(".env").exists() else None
+
 
 def _default_connector_version() -> str:
     """Read connector version from pyproject.toml with a safe fallback."""
@@ -23,7 +29,7 @@ class Settings(BaseSettings):
     """Application settings with environment variable support."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_env_file,
         env_file_encoding="utf-8",
         case_sensitive=False,
     )
