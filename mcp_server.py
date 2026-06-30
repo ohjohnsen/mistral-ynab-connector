@@ -8,13 +8,19 @@ All endpoints use the official YNAB API v1.85.0 terminology (/plans/ not /budget
 
 from __future__ import annotations
 
+import base64
 from datetime import datetime
+import hashlib
+import hmac
 import json
 import re
+import secrets
+import time
 from typing import Any
+from urllib.parse import parse_qs, urlencode
 
-from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, HTTPException, Query, Request, Response
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from config import settings
 from ynab_client import YNABClient
@@ -79,6 +85,91 @@ def _validate_required_param(param: Any, param_name: str, expected_type: type | 
     return param
 
 
+_OAUTH_TOKEN_EXPIRY_SECONDS = 3600
+_OAUTH_REFRESH_TOKEN_EXPIRY_SECONDS = 30 * 24 * 3600  # 30 days
+_AUTH_CODE_EXPIRY_SECONDS = 300  # 5 minutes
+
+
+def _check_client_secret(provided: str, stored: str) -> bool:
+    if not provided or not stored:
+        return False
+    return secrets.compare_digest(provided, stored)
+
+
+def _verify_pkce_s256(code_verifier: str, code_challenge: str) -> bool:
+    """Verify a PKCE S256 code_verifier against a stored code_challenge."""
+    digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
+    expected = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+    return secrets.compare_digest(expected, code_challenge)
+
+
+def _hmac_sign(payload_b64: str) -> str:
+    """Return base64url HMAC-SHA256 signature of payload_b64."""
+    sig = hmac.new(settings.oauth_client_secret.encode(), payload_b64.encode(), hashlib.sha256).digest()
+    return base64.urlsafe_b64encode(sig).decode().rstrip("=")
+
+
+def _make_signed_token(payload: dict[str, Any]) -> str:
+    """Encode payload as base64url JSON and append HMAC signature."""
+    payload_b64 = base64.urlsafe_b64encode(
+        json.dumps(payload, separators=(",", ":")).encode()
+    ).decode().rstrip("=")
+    return f"{payload_b64}.{_hmac_sign(payload_b64)}"
+
+
+def _decode_signed_token(token: str) -> dict[str, Any] | None:
+    """Verify signature and return decoded payload, or None if invalid/expired."""
+    if not settings.oauth_client_secret:
+        return None
+    try:
+        payload_b64, sig_b64 = token.rsplit(".", 1)
+        if not secrets.compare_digest(_hmac_sign(payload_b64), sig_b64):
+            return None
+        payload = json.loads(base64.urlsafe_b64decode(payload_b64 + "==").decode())
+        if time.time() >= payload.get("exp", 0):
+            return None
+        return payload
+    except Exception:
+        return None
+
+
+def _create_auth_code(client_id: str, redirect_uri: str, code_challenge: str, scope: str) -> str:
+    """Create a self-verifying auth code (survives server restarts)."""
+    return _make_signed_token({
+        "typ": "code",
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "code_challenge": code_challenge,
+        "scope": scope,
+        "exp": int(time.time()) + _AUTH_CODE_EXPIRY_SECONDS,
+        "nti": secrets.token_urlsafe(8),
+    })
+
+
+def _create_access_token() -> str:
+    """Create a self-verifying access token (survives server restarts)."""
+    return _make_signed_token({
+        "typ": "access",
+        "exp": int(time.time()) + _OAUTH_TOKEN_EXPIRY_SECONDS,
+        "jti": secrets.token_urlsafe(16),
+    })
+
+
+def _create_refresh_token() -> str:
+    """Create a self-verifying refresh token valid for 30 days."""
+    return _make_signed_token({
+        "typ": "refresh",
+        "exp": int(time.time()) + _OAUTH_REFRESH_TOKEN_EXPIRY_SECONDS,
+        "jti": secrets.token_urlsafe(16),
+    })
+
+
+def _verify_access_token(token: str) -> bool:
+    """Return True if the token is a valid, unexpired access token."""
+    payload = _decode_signed_token(token)
+    return payload is not None and payload.get("typ") == "access"
+
+
 def get_ynab_api_key(
     authorization: str | None = None,
 ) -> str:
@@ -98,20 +189,30 @@ def get_ynab_client(api_key: str | None = None) -> YNABClient:
 
 
 def get_ynab_api_key_from_bearer_header(authorization: str | None) -> str:
-    """Extract YNAB API key strictly from Authorization Bearer header.
+    """Resolve the YNAB API key from the Authorization header.
 
-    This helper is used by MCP JSON-RPC handlers to enforce header-based auth.
+    If OAuth is configured: validates the signed access token, then returns YNAB key from env.
+    If OAuth is not configured: treats the bearer token as a direct YNAB API key.
     """
     if authorization is not None:
         auth_value = authorization.strip()
         if auth_value.lower().startswith("bearer "):
             token = auth_value[7:].strip()
             if token:
-                return token
+                if settings.oauth_client_secret:
+                    if _verify_access_token(token):
+                        if not settings.ynab_api_key:
+                            raise HTTPException(
+                                status_code=500,
+                                detail="YNAB_API_KEY is not configured on the server.",
+                            )
+                        return settings.ynab_api_key
+                else:
+                    return token
 
     raise HTTPException(
         status_code=401,
-        detail="Authentication required. Provide YNAB API key as Bearer token in Authorization header.",
+        detail="Authentication required. Provide a valid OAuth Bearer token.",
     )
 
 
@@ -139,9 +240,13 @@ async def server_card() -> dict[str, Any]:
         "version": settings.mcp_version,
         "url": "/mcp",
         "auth": {
-            "type": "api_key",
-            "headerName": "Authorization",
-            "description": "Provide YNAB API key as Bearer token",
+            "type": "oauth2",
+            "flows": {
+                "clientCredentials": {
+                    "tokenUrl": "/oauth/token",
+                    "scopes": {},
+                }
+            },
         },
         "capabilities": {
             "tools": {},
@@ -234,6 +339,145 @@ async def server_card() -> dict[str, Any]:
 
 
 # ============================================================================
+# OAuth 2.0 Endpoints (Authorization Code + PKCE S256, as required by Claude.ai)
+# ============================================================================
+
+@app.get("/.well-known/oauth-protected-resource")
+async def oauth_protected_resource_metadata(request: Request) -> dict[str, Any]:
+    """OAuth Protected Resource Metadata (RFC 9728).
+
+    Tells clients which authorization server issues tokens for this resource.
+    Claude.ai uses this to discover the OAuth flow after receiving a 401.
+    """
+    base_url = str(request.base_url).rstrip("/")
+    return {
+        "resource": f"{base_url}/mcp",
+        "authorization_servers": [base_url],
+    }
+
+
+@app.get("/.well-known/oauth-authorization-server")
+async def oauth_server_metadata(request: Request) -> dict[str, Any]:
+    """OAuth 2.0 Authorization Server Metadata (RFC 8414)."""
+    base_url = str(request.base_url).rstrip("/")
+    return {
+        "issuer": base_url,
+        "authorization_endpoint": f"{base_url}/oauth/authorize",
+        "token_endpoint": f"{base_url}/oauth/token",
+        "grant_types_supported": ["authorization_code"],
+        "code_challenge_methods_supported": ["S256"],
+        "token_endpoint_auth_methods_supported": ["client_secret_post"],
+        "response_types_supported": ["code"],
+    }
+
+
+@app.get("/oauth/authorize")
+async def oauth_authorize(request: Request) -> Response:
+    """OAuth 2.0 Authorization endpoint.
+
+    Validates the request and immediately redirects back with an auth code.
+    No consent page — this is a single-owner connector.
+    """
+    if not settings.oauth_client_id:
+        return JSONResponse(status_code=501, content={"error": "oauth_not_configured"})
+
+    q = request.query_params
+    response_type = q.get("response_type", "")
+    client_id = q.get("client_id", "")
+    redirect_uri = q.get("redirect_uri", "")
+    code_challenge = q.get("code_challenge", "")
+    code_challenge_method = q.get("code_challenge_method", "")
+    state = q.get("state", "")
+    scope = q.get("scope", "")
+
+    # Validate client_id before trusting redirect_uri (prevents open redirect)
+    if not secrets.compare_digest(client_id, settings.oauth_client_id):
+        return JSONResponse(status_code=400, content={"error": "invalid_client", "error_description": "Unknown client_id"})
+
+    if redirect_uri != settings.oauth_redirect_uri:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "invalid_redirect_uri", "error_description": f"Registered redirect URI: {settings.oauth_redirect_uri}"},
+        )
+
+    if response_type != "code":
+        qs = urlencode({"error": "unsupported_response_type", "state": state})
+        return RedirectResponse(url=f"{redirect_uri}?{qs}", status_code=302)
+
+    if code_challenge_method != "S256" or not code_challenge:
+        qs = urlencode({"error": "invalid_request", "error_description": "PKCE S256 required", "state": state})
+        return RedirectResponse(url=f"{redirect_uri}?{qs}", status_code=302)
+
+    code = _create_auth_code(client_id, redirect_uri, code_challenge, scope)
+
+    redirect_params: dict[str, str] = {"code": code}
+    if state:
+        redirect_params["state"] = state
+    return RedirectResponse(url=f"{redirect_uri}?{urlencode(redirect_params)}", status_code=302)
+
+
+@app.post("/oauth/token")
+async def oauth_token(request: Request) -> JSONResponse:
+    """OAuth 2.0 token endpoint — authorization_code grant with PKCE S256."""
+    if not settings.oauth_client_id or not settings.oauth_client_secret:
+        return JSONResponse(
+            status_code=501,
+            content={"error": "oauth_not_configured", "error_description": "OAuth is not configured on this server."},
+        )
+
+    body = await request.body()
+    params = parse_qs(body.decode())
+
+    def _first(key: str) -> str:
+        return (params.get(key) or [""])[0]
+
+    grant_type = _first("grant_type")
+    client_id = _first("client_id")
+    client_secret = _first("client_secret")
+
+    if not secrets.compare_digest(client_id, settings.oauth_client_id) or \
+       not _check_client_secret(client_secret, settings.oauth_client_secret):
+        return JSONResponse(status_code=401, content={"error": "invalid_client"})
+
+    if grant_type == "authorization_code":
+        code = _first("code")
+        code_verifier = _first("code_verifier")
+        redirect_uri = _first("redirect_uri")
+
+        pending = _decode_signed_token(code)
+        if not pending or pending.get("typ") != "code":
+            return JSONResponse(
+                status_code=400,
+                content={"error": "invalid_grant", "error_description": "Invalid or expired authorization code"},
+            )
+
+        if pending["client_id"] != client_id or pending["redirect_uri"] != redirect_uri:
+            return JSONResponse(status_code=400, content={"error": "invalid_grant"})
+
+        if not _verify_pkce_s256(code_verifier, pending["code_challenge"]):
+            return JSONResponse(
+                status_code=400,
+                content={"error": "invalid_grant", "error_description": "PKCE verification failed"},
+            )
+
+    elif grant_type == "refresh_token":
+        refresh_token = _first("refresh_token")
+        payload = _decode_signed_token(refresh_token)
+        if not payload or payload.get("typ") != "refresh":
+            return JSONResponse(status_code=400, content={"error": "invalid_grant"})
+
+    else:
+        return JSONResponse(status_code=400, content={"error": "unsupported_grant_type"})
+
+    return JSONResponse(content={
+        "access_token": _create_access_token(),
+        "refresh_token": _create_refresh_token(),
+        "token_type": "Bearer",
+        "expires_in": _OAUTH_TOKEN_EXPIRY_SECONDS,
+    })
+
+
+# ============================================================================
 # MCP JSON-RPC 2.0 Protocol Endpoint
 # ============================================================================
 
@@ -262,17 +506,36 @@ async def mcp_handler(request: Request) -> JSONResponse:
         )
     
     authorization = request.headers.get("authorization")
+    base_url = str(request.base_url).rstrip("/")
+    www_auth = f'Bearer resource_metadata="{base_url}/.well-known/oauth-protected-resource"'
+
+    def _auth_401(detail: str, req_id: Any) -> JSONResponse:
+        return JSONResponse(
+            status_code=401,
+            content={"jsonrpc": "2.0", "error": {"code": -32000, "message": detail}, "id": req_id},
+            headers={"WWW-Authenticate": www_auth},
+        )
 
     # Handle batch requests
     if isinstance(body, list):
         results = []
         for req in body:
-            result = await _handle_rpc_request(req, authorization=authorization)
+            try:
+                result = await _handle_rpc_request(req, authorization=authorization)
+            except HTTPException as e:
+                if e.status_code == 401:
+                    return _auth_401(e.detail, req.get("id") if isinstance(req, dict) else None)
+                raise
             results.append(result)
         return JSONResponse(content=results)
-    
+
     # Handle single request
-    result = await _handle_rpc_request(body, authorization=authorization)
+    try:
+        result = await _handle_rpc_request(body, authorization=authorization)
+    except HTTPException as e:
+        if e.status_code == 401:
+            return _auth_401(e.detail, body.get("id") if isinstance(body, dict) else None)
+        raise
     return JSONResponse(content=result)
 
 
@@ -291,11 +554,10 @@ async def _handle_rpc_request(
         "resources/write",
     }
 
-    request_api_key: str | None = None
-    if method in methods_requiring_auth:
-        request_api_key = get_ynab_api_key_from_bearer_header(authorization)
-    
     try:
+        request_api_key: str | None = None
+        if method in methods_requiring_auth:
+            request_api_key = get_ynab_api_key_from_bearer_header(authorization)
         if method == "initialize":
             result = await _handle_initialize(params, request_id)
         elif method == "tools/list":
@@ -321,6 +583,8 @@ async def _handle_rpc_request(
         return result
     
     except HTTPException as e:
+        if e.status_code == 401:
+            raise  # propagate so mcp_handler can return a real HTTP 401
         return {
             "jsonrpc": "2.0",
             "error": {

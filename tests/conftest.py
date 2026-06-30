@@ -13,8 +13,12 @@ from ynab_client import YNABClient
 
 
 @pytest.fixture
-def test_client():
-    """Create a test client for the FastAPI app."""
+def test_client(mock_settings):
+    """Create a test client for the FastAPI app.
+
+    Depends on mock_settings so OAuth is disabled by default, letting the
+    static Bearer token below be treated as a direct YNAB API key.
+    """
     return TestClient(
         app,
         headers={"Authorization": "Bearer test_api_key_12345"},
@@ -27,6 +31,8 @@ def mock_settings(monkeypatch):
     test_settings = Settings(
         ynab_api_key="test_api_key_12345",
         ynab_api_url="https://api.youneedabudget.com/v1",
+        oauth_client_id="",
+        oauth_client_secret="",
         server_host="0.0.0.0",
         server_port=8000,
         mcp_name="YNAB Connector Test",
