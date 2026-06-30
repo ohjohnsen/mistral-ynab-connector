@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   ynab-connector:
     # Pull pre-built image from Docker Hub
@@ -8,7 +6,7 @@ services:
     
     container_name: ynab-mcp-connector
     ports:
-      - "8000:8000"
+      - "8088:8000"
     restart: unless-stopped
 
     environment:
@@ -18,7 +16,7 @@ services:
 
     # Health check
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/mcp/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/mcp/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -43,7 +41,7 @@ services:
 #    - Start: docker-compose up -d
 #    - Stop: docker-compose down
 #    - View logs: docker-compose logs -f
-#    - Test: curl http://localhost:8000/mcp/health
+#    - Test: curl http://localhost:8000/mcp/health  (or use docker inspect to see healthcheck status)
 #
 # 4. MCP CLIENT CONFIGURATION
 #    In Claude.ai, add the connector with URL:
@@ -51,5 +49,5 @@ services:
 #    and complete the OAuth authorization flow when prompted.
 #
 # 5. CUSTOM PORT
-#    To use a different external port (e.g., 8080):
-#    Change the ports line to: - "8080:8000"
+#    To use a different external port (e.g., 9000):
+#    Change the ports line to: - "9000:8000"
