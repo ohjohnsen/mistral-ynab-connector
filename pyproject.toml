@@ -1,5 +1,5 @@
 [project]
-name = "mistral-ynab-connector"
+name = "ynab-mcp-connector"
 version = "0.4.0"
 description = "A YNAB (You Need A Budget) MCP Connector for Mistral"
 readme = "README.md"

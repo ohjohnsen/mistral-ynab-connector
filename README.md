@@ -30,7 +30,7 @@ A Model Context Protocol (MCP) connector for You Need A Budget (YNAB) that expos
 
 ```bash
 git clone <repository-url>
-cd mistral-ynab-connector
+cd ynab-mcp-connector
 ```
 
 ### 2. Install Dependencies
@@ -405,7 +405,7 @@ For direct HTTP access (in addition to MCP JSON-RPC):
 ## Project Structure
 
 ```
-mistral-ynab-connector/
+ynab-mcp-connector/
 ├── main.py              # Server entry point
 ├── config.py            # Configuration management
 ├── mcp_server.py        # FastAPI application with MCP JSON-RPC + OAuth endpoints

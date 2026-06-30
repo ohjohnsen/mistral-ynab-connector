@@ -6,7 +6,7 @@ services:
     image: ohjohnsen/ynab-mcp-connector:latest
     pull_policy: always
     
-    container_name: mistral-ynab-connector
+    container_name: ynab-mcp-connector
     ports:
       - "8000:8000"
     restart: unless-stopped
