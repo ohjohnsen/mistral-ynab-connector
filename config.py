@@ -10,7 +10,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 def _default_connector_version() -> str:
     """Read connector version from pyproject.toml with a safe fallback."""
-    fallback_version = "0.4.0"
+    fallback_version = "0.4.1"
     try:
         pyproject_path = Path(__file__).with_name("pyproject.toml")
         data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
